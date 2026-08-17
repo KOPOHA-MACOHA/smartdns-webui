@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# Читаем версию из локального файла (BASE_DIR передается из index.cgi)
+CURRENT_VERSION=$(cat "$BASE_DIR/version.txt" 2>/dev/null | tr -d '\r\n')
+[ -z "$CURRENT_VERSION" ] && CURRENT_VERSION="0.0.0"
+REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/main"
+
 TEST_MODE="$HTTP_X_TEST_MODE"
 
 if [ "$TEST_MODE" = "1" ]; then
@@ -25,7 +30,6 @@ handle_api() {
     ACTION="$1"
     TARGET=$(sanitize_target "$2")
 
-    # Теперь все запросы (и GET, и POST) обрабатываются единым блоком
     case "$ACTION" in
         "save_config") cat > "$CONF_FILE"; echo "OK" ;;
         "save_list") [ -n "$TARGET" ] && cat > "${DOMAINS_DIR}${TARGET}"; echo "OK" ;;
@@ -36,5 +40,20 @@ handle_api() {
         "get_lists") ls -1 "$DOMAINS_DIR" 2>/dev/null | grep '\.list$' ;;
         "get_list") [ -n "$TARGET" ] && cat "${DOMAINS_DIR}${TARGET}" 2>/dev/null ;;
         "get_log") cat "$LOG_FILE" 2>/dev/null ;;
+        
+        # --- БЛОК АВТООБНОВЛЕНИЯ ---
+        "check_update")
+            LATEST=$(curl -sL "$REPO_URL/version.txt" | tr -d '\r\n')
+            if [ -n "$LATEST" ] && [ "$LATEST" != "$CURRENT_VERSION" ]; then
+                echo "UPDATE_AVAILABLE|$LATEST"
+            else
+                echo "UP_TO_DATE"
+            fi
+            ;;
+        "do_update")
+            # Запускаем установщик в фоновом режиме, чтобы не обрывать запрос
+            (curl -sL "$REPO_URL/install.sh" | sh) >/dev/null 2>&1 &
+            echo "OK"
+            ;;
     esac
 }

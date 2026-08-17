@@ -21,6 +21,7 @@ curl -sL "$REPO_URL/api.sh" -o "$WEB_DIR/api.sh"
 curl -sL "$REPO_URL/template.html" -o "$WEB_DIR/template.html"
 curl -sL "$REPO_URL/parser.js" -o "$WEB_DIR/parser.js"
 curl -sL "$REPO_URL/app.js" -o "$WEB_DIR/app.js"
+curl -sL "$REPO_URL/version.txt" -o "$WEB_DIR/version.txt"
 
 echo "[3/4] Настройка прав и веб-сервера..."
 # Очищаем от возможных Windows-переносов строк и даем права

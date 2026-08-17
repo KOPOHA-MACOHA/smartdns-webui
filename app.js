@@ -313,17 +313,43 @@ function toggleComment(textarea) {
     textarea.selectionEnd = lineStart + newText.length;
 }
 
+// === АВТООБНОВЛЕНИЕ ===
+async function checkUpdate() {
+    const res = await apiCall('check_update');
+    if (res && res.startsWith('UPDATE_AVAILABLE')) {
+        const parts = res.split('|');
+        const btn = document.getElementById('btn-update');
+        btn.classList.remove('d-none');
+        btn.innerHTML = `<i class="bi bi-cloud-arrow-down-fill me-1"></i> Обновить (v${parts[1]})`;
+    }
+}
+
+async function performUpdate() {
+    if (!confirm('Найдена новая версия на GitHub. Скачать и установить? Страница будет перезагружена.')) return;
+    
+    const btn = document.getElementById('btn-update');
+    btn.innerHTML = `<i class="bi bi-hourglass-split me-1"></i> Обновление...`;
+    btn.disabled = true;
+    
+    await apiCall('do_update');
+    
+    // Даем роутеру 4 секунды на скачивание файлов и рестарт lighttpd
+    setTimeout(() => {
+        window.location.reload(true);
+    }, 4000);
+}
+
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
 function initApp() {
     const path = window.location.pathname.replace('/', '');
     const validTabs = ['settings', 'lists', 'logs'];
     const startTab = validTabs.includes(path) ? path : 'settings';
 
-    // Фиксируем стартовое состояние в истории
     window.history.replaceState({ tab: startTab }, '', '/' + startTab);
-    
-    // Запускаем отрисовку нужной вкладки
     switchTab(startTab, null, false);
+    
+    // Проверяем обновления в фоне через 2 секунды после загрузки
+    setTimeout(checkUpdate, 2000);
 }
 
 initApp();
