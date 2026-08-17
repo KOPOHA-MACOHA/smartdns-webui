@@ -15,13 +15,15 @@ mkdir -p "$WEB_DIR"
 mkdir -p "$CONF_DIR"
 
 echo "[2/4] Скачивание файлов..."
-# Используем curl, так как он отлично работает с HTTPS в Entware
-curl -sL "$REPO_URL/index.cgi" -o "$WEB_DIR/index.cgi"
-curl -sL "$REPO_URL/api.sh" -o "$WEB_DIR/api.sh"
-curl -sL "$REPO_URL/template.html" -o "$WEB_DIR/template.html"
-curl -sL "$REPO_URL/parser.js" -o "$WEB_DIR/parser.js"
-curl -sL "$REPO_URL/app.js" -o "$WEB_DIR/app.js"
-curl -sL "$REPO_URL/version.txt" -o "$WEB_DIR/version.txt"
+# Генерируем уникальный timestamp для обхода кэша GitHub
+T=$(date +%s)
+
+curl -sL "$REPO_URL/index.cgi?t=$T" -o "$WEB_DIR/index.cgi"
+curl -sL "$REPO_URL/api.sh?t=$T" -o "$WEB_DIR/api.sh"
+curl -sL "$REPO_URL/template.html?t=$T" -o "$WEB_DIR/template.html"
+curl -sL "$REPO_URL/parser.js?t=$T" -o "$WEB_DIR/parser.js"
+curl -sL "$REPO_URL/app.js?t=$T" -o "$WEB_DIR/app.js"
+curl -sL "$REPO_URL/version.txt?t=$T" -o "$WEB_DIR/version.txt"
 
 echo "[3/4] Настройка прав и веб-сервера..."
 # Очищаем от возможных Windows-переносов строк и даем права

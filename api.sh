@@ -43,11 +43,16 @@ handle_api() {
         
         # --- БЛОК АВТООБНОВЛЕНИЯ ---
         "get_update")
-            # Скачиваем версию с GitHub, если нет интернета - приравниваем к текущей
-            LATEST=$(curl -sL "$REPO_URL/version.txt" 2>/dev/null | tr -d '\r\n')
+            # Проверяем версию без кэша GitHub (добавляем ?t=время)
+            LATEST=$(curl -sL "$REPO_URL/version.txt?t=$(date +%s)" 2>/dev/null | tr -d '\r\n')
             [ -z "$LATEST" ] && LATEST="$CURRENT_VERSION"
             
             echo "${CURRENT_VERSION}|${LATEST}"
+            ;;
+        "do_update")
+            # Отвязываем процесс от веб-сервера через nohup и даем 1 секунду форы
+            nohup sh -c "sleep 1; curl -sL '$REPO_URL/install.sh?t=\$(date +%s)' | sh" >/dev/null 2>&1 &
+            echo "OK"
             ;;
     esac
 }
