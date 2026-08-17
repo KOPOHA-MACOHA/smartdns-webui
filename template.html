@@ -29,8 +29,11 @@
         <a class="navbar-brand fw-bold" href="#">SmartDNS<span class="text-primary">Geo</span></a>
         
         <div class="d-flex align-items-center ms-auto gap-2">
-            <!-- Кнопка обновления (скрыта по умолчанию) -->
-            <button id="btn-update" class="btn btn-success btn-sm fw-bold d-none" onclick="performUpdate()"></button>
+            <!-- Кнопка обновления (всегда видима) -->
+            <button id="btn-update" class="btn btn-outline-secondary btn-sm fw-bold position-relative me-3" disabled onclick="performUpdate()">
+                <i class="bi bi-github me-1"></i> v<span id="current-version-text">...</span>
+                <span id="update-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-success border border-dark rounded-circle d-none"></span>
+            </button>
             
             <div class="form-check form-switch mx-3 mb-0">
                 <input class="form-check-input" type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">

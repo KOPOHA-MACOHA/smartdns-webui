@@ -42,18 +42,12 @@ handle_api() {
         "get_log") cat "$LOG_FILE" 2>/dev/null ;;
         
         # --- БЛОК АВТООБНОВЛЕНИЯ ---
-        "check_update")
-            LATEST=$(curl -sL "$REPO_URL/version.txt" | tr -d '\r\n')
-            if [ -n "$LATEST" ] && [ "$LATEST" != "$CURRENT_VERSION" ]; then
-                echo "UPDATE_AVAILABLE|$LATEST"
-            else
-                echo "UP_TO_DATE"
-            fi
-            ;;
-        "do_update")
-            # Запускаем установщик в фоновом режиме, чтобы не обрывать запрос
-            (curl -sL "$REPO_URL/install.sh" | sh) >/dev/null 2>&1 &
-            echo "OK"
+        "get_update")
+            # Скачиваем версию с GitHub, если нет интернета - приравниваем к текущей
+            LATEST=$(curl -sL "$REPO_URL/version.txt" 2>/dev/null | tr -d '\r\n')
+            [ -z "$LATEST" ] && LATEST="$CURRENT_VERSION"
+            
+            echo "${CURRENT_VERSION}|${LATEST}"
             ;;
     esac
 }

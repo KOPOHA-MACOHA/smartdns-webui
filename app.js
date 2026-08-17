@@ -315,25 +315,45 @@ function toggleComment(textarea) {
 
 // === АВТООБНОВЛЕНИЕ ===
 async function checkUpdate() {
-    const res = await apiCall('check_update');
-    if (res && res.startsWith('UPDATE_AVAILABLE')) {
-        const parts = res.split('|');
-        const btn = document.getElementById('btn-update');
-        btn.classList.remove('d-none');
-        btn.innerHTML = `<i class="bi bi-cloud-arrow-down-fill me-1"></i> Обновить (v${parts[1]})`;
+    const btn = document.getElementById('btn-update');
+    const verText = document.getElementById('current-version-text');
+    const badge = document.getElementById('update-badge');
+    
+    const res = await apiCall('get_update');
+    if (!res || !res.includes('|')) {
+        verText.innerText = "???";
+        return;
+    }
+    
+    // ДОБАВЛЕН .trim() ЗДЕСЬ:
+    const [current, latest] = res.trim().split('|');
+    verText.innerText = current; 
+    
+    // Теперь сравнение будет точным: "1.0.0" !== "1.0.0"
+    if (latest && latest !== current && !latest.includes('<')) {
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-outline-success');
+        btn.disabled = false;
+        btn.title = `Доступна новая версия: v${latest}\nНажмите для обновления`;
+        badge.classList.remove('d-none');
+    } else {
+        btn.title = 'У вас установлена актуальная версия';
     }
 }
 
 async function performUpdate() {
-    if (!confirm('Найдена новая версия на GitHub. Скачать и установить? Страница будет перезагружена.')) return;
-    
     const btn = document.getElementById('btn-update');
+    const latestVer = btn.title.match(/v([\d\.]+)/) ? btn.title.match(/v([\d\.]+)/)[1] : '';
+    
+    if (!confirm(`Найдена новая версия на GitHub${latestVer ? ' (' + latestVer + ')' : ''}. Скачать и установить? Страница будет перезагружена.`)) return;
+    
     btn.innerHTML = `<i class="bi bi-hourglass-split me-1"></i> Обновление...`;
     btn.disabled = true;
+    document.getElementById('update-badge')?.classList.add('d-none');
     
     await apiCall('do_update');
     
-    // Даем роутеру 4 секунды на скачивание файлов и рестарт lighttpd
+    // Даем роутеру 4 секунды на скачивание файлов и перезагружаем
     setTimeout(() => {
         window.location.reload(true);
     }, 4000);
