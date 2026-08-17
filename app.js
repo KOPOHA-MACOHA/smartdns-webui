@@ -128,20 +128,108 @@ window.addEventListener('popstate', (e) => {
     switchTab(tab, null, false);
 });
 
-function validateSyntax(text) {
+// === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
+async function validateConfigLogical(text) {
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     
+    // Встроенные системные "группы" SmartDNS: 
+    // fallback, # (блокировка/NXDOMAIN), - (SOA)
+    let definedGroups = ['fallback', '#', '-']; 
+    let usedLists = [];
+    
+    // Шаг 1: Собираем все объявленные группы (даже если они написаны ниже маршрутов)
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line || line.startsWith('#')) continue;
         
         const cmd = line.split(/\s+/)[0];
+        
+        // Базовая синтаксическая проверка
         if (cmd.startsWith('server-') && !validServers.includes(cmd)) {
             return `Ошибка в строке ${i + 1}:\n"${line}"\nНесуществующая директива '${cmd}'!`;
         }
+
+        // Ищем параметр -group во всех серверах
+        if (validServers.includes(cmd)) {
+            const regex = /-group\s+([^\s]+)/g;
+            let match;
+            while ((match = regex.exec(line)) !== null) {
+                definedGroups.push(match[1]);
+            }
+        }
     }
-    return null;
+
+    // Шаг 2: Проверяем, ссылаются ли маршруты на существующие группы и файлы
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.startsWith('#')) continue;
+        const cmd = line.split(/\s+/)[0];
+
+        // Проверка групп в nameserver (маршрутизация)
+        if (cmd === 'nameserver') {
+            const nsMatch = line.match(/\/domain-set:[^\/]+\/([^\s\/]+)/);
+            if (nsMatch) {
+                const g = nsMatch[1];
+                if (!definedGroups.includes(g)) {
+                    return `Отмена сохранения!\nМаршрут ссылается на группу "${g}", но такая группа не создана!\nСначала добавьте её в блоке "Групповые DNS записи".`;
+                }
+            }
+        }
+
+        // Сбор файлов из domain-set
+        if (cmd === 'domain-set') {
+            const fileMatch = line.match(/-file\s+([^\s]+)/);
+            if (fileMatch) {
+                // Очищаем от случайных кавычек
+                usedLists.push(fileMatch[1].replace(/['"]/g, ''));
+            }
+        }
+    }
+
+    // Шаг 3: Проверяем физическое наличие списков доменов (.list)
+    if (usedLists.length > 0) {
+        // Запрашиваем реальный список файлов с роутера
+        const listsRaw = await apiCall('get_lists');
+        const availableLists = listsRaw.split('\n').map(l => l.trim()).filter(l => l);
+        
+        for (let file of usedLists) {
+            const fileName = file.split('/').pop();
+            // Проверяем только те, что заканчиваются на .list
+            if (fileName.endsWith('.list') && !availableLists.includes(fileName)) {
+                return `Отмена сохранения!\nМаршрут требует лист "${fileName}", но он не существует!\nПерейдите во вкладку "Списки" и сначала создайте его.`;
+            }
+        }
+    }
+
+    return null; // Всё отлично, ошибок нет
+}
+
+// === ОСНОВНОЕ СОХРАНЕНИЕ ===
+async function globalSave() {
+    let contentToSave = '';
+    
+    if (activeTab === 'settings') {
+        contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
+        
+        // Вызываем нашу новую мощную асинхронную валидацию
+        const error = await validateConfigLogical(contentToSave);
+        if (error) { 
+            alert(error); 
+            return false; 
+        }
+        
+        await apiCall('save_config', null, contentToSave);
+        originalConfigContent = contentToSave; 
+        
+    } else if (activeTab === 'lists' && activeList) {
+        contentToSave = document.getElementById('list-content').value;
+        await apiCall('save_list', activeList, contentToSave);
+        originalListContent = contentToSave; 
+    }
+    
+    updateSaveButtonState();
+    return true; 
 }
 
 async function loadConfig() {
@@ -155,27 +243,6 @@ async function loadConfig() {
         document.getElementById('raw-config-text').value = content;
     }
     updateSaveButtonState();
-}
-
-async function globalSave() {
-    let contentToSave = '';
-    
-    if (activeTab === 'settings') {
-        contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
-        const error = validateSyntax(contentToSave);
-        if (error) { alert(error); return false; }
-        
-        await apiCall('save_config', null, contentToSave);
-        originalConfigContent = contentToSave; 
-        
-    } else if (activeTab === 'lists' && activeList) {
-        contentToSave = document.getElementById('list-content').value;
-        await apiCall('save_list', activeList, contentToSave);
-        originalListContent = contentToSave; 
-    }
-    
-    updateSaveButtonState();
-    return true; 
 }
 
 async function restartService() {
