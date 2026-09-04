@@ -18,7 +18,6 @@ async function apiCall(action, target = null, body = null) {
     if (target) headers['X-Target'] = target;
     
     try {
-        // Запрос всегда идёт на /index.cgi, независимо от текущего красивого URL
         const response = await fetch('/index.cgi', { method: 'POST', headers, body });
         const text = await response.text();
         
@@ -57,6 +56,22 @@ function updateSaveButtonState() {
 function markConfigDirty() { updateSaveButtonState(); }
 function markListDirty() { updateSaveButtonState(); }
 
+// === АВТОРЕСАЙЗ ТЕКСТОВЫХ ПОЛЕЙ ===
+function autoResizeTextarea(el) {
+    // Пропускаем главные большие редакторы (Сырой конфиг, Списки, Логи)
+    if (['raw-config-text', 'list-content', 'log-content'].includes(el.id)) return;
+    
+    el.style.overflow = 'hidden'; // Убираем мерцание скроллбара
+    el.style.height = 'auto'; // Сбрасываем высоту для корректного пересчета при удалении строк
+    el.style.height = (el.scrollHeight + 2) + 'px'; // Устанавливаем высоту по контенту + бордер
+}
+
+document.addEventListener('input', (e) => {
+    if (e.target && e.target.tagName === 'TEXTAREA') {
+        autoResizeTextarea(e.target);
+    }
+});
+
 function switchSettingsMode(mode) {
     if (currentSettingsMode === mode) return;
     
@@ -74,6 +89,11 @@ function switchSettingsMode(mode) {
         document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
         uiView.style.display = 'block'; rawView.style.display = 'none';
         btnUI.className = 'btn btn-sm btn-primary'; btnRaw.className = 'btn btn-sm btn-outline-secondary';
+        
+        // Подгоняем размеры блоков после возврата в визуальный режим
+        setTimeout(() => {
+            document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
+        }, 10);
     }
     
     currentSettingsMode = mode;
@@ -93,13 +113,11 @@ async function switchTab(tabId, clickedEl, pushState = true) {
     
     document.querySelectorAll('.nav-pills .nav-link').forEach(link => link.classList.remove('active'));
     
-    // Если кликнули не мышкой, а зашли по ссылке — находим нужную кнопку в меню
     if (!clickedEl) {
         clickedEl = document.querySelector(`.nav-link[onclick*="'${tabId}'"]`);
     }
     if (clickedEl) clickedEl.classList.add('active');
     
-    // Меняем URL в строке браузера
     if (pushState) {
         window.history.pushState({ tab: tabId }, '', '/' + tabId);
     }
@@ -112,7 +130,7 @@ async function switchTab(tabId, clickedEl, pushState = true) {
     if (tabId === 'settings') {
         await loadConfig();
     } else if (tabId === 'lists') {
-        activeList = ''; // ФИКС: Сбрасываем выбранный лист, чтобы он загрузился заново
+        activeList = ''; 
         originalListContent = ''; 
         document.getElementById('list-content').value = 'Загрузка...';
         document.getElementById('list-content').disabled = true;
@@ -122,7 +140,6 @@ async function switchTab(tabId, clickedEl, pushState = true) {
     }
 }
 
-// Обработка кнопок "Назад" и "Вперед" в браузере
 window.addEventListener('popstate', (e) => {
     const tab = (e.state && e.state.tab) ? e.state.tab : 'settings';
     switchTab(tab, null, false);
@@ -133,24 +150,19 @@ async function validateConfigLogical(text) {
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     
-    // Встроенные системные "группы" SmartDNS: 
-    // fallback, # (блокировка/NXDOMAIN), - (SOA)
     let definedGroups = ['fallback', '#', '-']; 
     let usedLists = [];
     
-    // Шаг 1: Собираем все объявленные группы (даже если они написаны ниже маршрутов)
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line || line.startsWith('#')) continue;
         
         const cmd = line.split(/\s+/)[0];
         
-        // Базовая синтаксическая проверка
         if (cmd.startsWith('server-') && !validServers.includes(cmd)) {
             return `Ошибка в строке ${i + 1}:\n"${line}"\nНесуществующая директива '${cmd}'!`;
         }
 
-        // Ищем параметр -group во всех серверах
         if (validServers.includes(cmd)) {
             const regex = /-group\s+([^\s]+)/g;
             let match;
@@ -160,13 +172,11 @@ async function validateConfigLogical(text) {
         }
     }
 
-    // Шаг 2: Проверяем, ссылаются ли маршруты на существующие группы и файлы
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line || line.startsWith('#')) continue;
         const cmd = line.split(/\s+/)[0];
 
-        // Проверка групп в nameserver (маршрутизация)
         if (cmd === 'nameserver') {
             const nsMatch = line.match(/\/domain-set:[^\/]+\/([^\s\/]+)/);
             if (nsMatch) {
@@ -177,32 +187,27 @@ async function validateConfigLogical(text) {
             }
         }
 
-        // Сбор файлов из domain-set
         if (cmd === 'domain-set') {
             const fileMatch = line.match(/-file\s+([^\s]+)/);
             if (fileMatch) {
-                // Очищаем от случайных кавычек
                 usedLists.push(fileMatch[1].replace(/['"]/g, ''));
             }
         }
     }
 
-    // Шаг 3: Проверяем физическое наличие списков доменов (.list)
     if (usedLists.length > 0) {
-        // Запрашиваем реальный список файлов с роутера
         const listsRaw = await apiCall('get_lists');
         const availableLists = listsRaw.split('\n').map(l => l.trim()).filter(l => l);
         
         for (let file of usedLists) {
             const fileName = file.split('/').pop();
-            // Проверяем только те, что заканчиваются на .list
             if (fileName.endsWith('.list') && !availableLists.includes(fileName)) {
                 return `Отмена сохранения!\nМаршрут требует лист "${fileName}", но он не существует!\nПерейдите во вкладку "Списки" и сначала создайте его.`;
             }
         }
     }
 
-    return null; // Всё отлично, ошибок нет
+    return null; 
 }
 
 // === ОСНОВНОЕ СОХРАНЕНИЕ ===
@@ -212,7 +217,6 @@ async function globalSave() {
     if (activeTab === 'settings') {
         contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
         
-        // Вызываем нашу новую мощную асинхронную валидацию
         const error = await validateConfigLogical(contentToSave);
         if (error) { 
             alert(error); 
@@ -243,6 +247,11 @@ async function loadConfig() {
         document.getElementById('raw-config-text').value = content;
     }
     updateSaveButtonState();
+    
+    // Подгоняем размеры блоков сразу после отрисовки конфига
+    setTimeout(() => {
+        document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
+    }, 10);
 }
 
 async function restartService() {
@@ -262,7 +271,6 @@ async function loadLists() {
     
     lists.forEach(l => {
         const activeClass = l === activeList ? 'active' : 'bg-dark text-light border-secondary';
-        // ФИКС: Заменили href="#" на javascript:void(0);, чтобы не ломался роутинг SPA
         html += `<a href="javascript:void(0);" onclick="selectList('${l}')" class="list-group-item list-group-item-action ${activeClass}"><i class="bi bi-file-earmark-text me-2"></i>${l}</a>`;
     });
     
@@ -392,11 +400,9 @@ async function checkUpdate() {
         return;
     }
     
-    // ДОБАВЛЕН .trim() ЗДЕСЬ:
     const [current, latest] = res.trim().split('|');
     verText.innerText = current; 
     
-    // Теперь сравнение будет точным: "1.0.0" !== "1.0.0"
     if (latest && latest !== current && !latest.includes('<')) {
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-outline-success');
@@ -420,7 +426,6 @@ async function performUpdate() {
     
     await apiCall('do_update');
     
-    // Даем роутеру 4 секунды на скачивание файлов и перезагружаем
     setTimeout(() => {
         window.location.reload(true);
     }, 4000);
@@ -435,7 +440,6 @@ function initApp() {
     window.history.replaceState({ tab: startTab }, '', '/' + startTab);
     switchTab(startTab, null, false);
     
-    // Проверяем обновления в фоне через 2 секунды после загрузки
     setTimeout(checkUpdate, 2000);
 }
 
