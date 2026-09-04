@@ -50,8 +50,8 @@ handle_api() {
             echo "${CURRENT_VERSION}|${LATEST}"
             ;;
         "do_update")
-            # Отвязываем процесс от веб-сервера через nohup и даем 1 секунду форы
-            nohup sh -c "sleep 1; curl -sL '$REPO_URL/install.sh?t=\$(date +%s)' | sh" >/dev/null 2>&1 &
+            # Надежный запуск в фоне без nohup и с защитой от виндовых символов
+            ( sleep 2; curl -sL "${REPO_URL}/install.sh?t=$(date +%s)" | tr -d '\r' | sh ) >/dev/null 2>&1 &
             echo "OK"
             ;;
     esac
