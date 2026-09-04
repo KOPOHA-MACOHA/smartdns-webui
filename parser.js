@@ -10,7 +10,12 @@ window.formatDns = function(url, suffix) {
     else if (url.startsWith('h3://')) prefix = 'server-h3';
     else if (url.startsWith('tcp://')) prefix = 'server-tcp';
     
-    let result = `${prefix} ${url} ${suffix}`.trim();
+    // Защита от дублирования, если юзер вписал приставку вручную
+    if (url.match(/^server(?:-[a-z0-9]+)?\s+/)) {
+        prefix = '';
+    }
+    
+    let result = prefix ? `${prefix} ${url} ${suffix}`.trim() : `${url} ${suffix}`.trim();
     return isComment ? `#${result}` : result;
 }
 
@@ -18,7 +23,8 @@ window.cleanDns = function(line, suffixesToRemove) {
     let isComment = line.startsWith('#');
     if (isComment) line = line.replace(/^#+\s*/, '');
     
-    let cleaned = line.replace(/^server(?:-[a-z]+)?\s+/, '');
+    // Добавлена цифра 0-9 для корректной работы с server-h3
+    let cleaned = line.replace(/^server(?:-[a-z0-9]+)?\s+/, '');
     if (Array.isArray(suffixesToRemove)) {
         suffixesToRemove.forEach(s => cleaned = cleaned.replace(new RegExp(s, 'g'), ''));
     } else {
