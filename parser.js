@@ -79,7 +79,8 @@ const UI = {
         </div>`,
 
     addressRow: (domain, ip) => `
-        <div class="address-item d-flex mb-2">
+        <div class="address-item d-flex mb-2 align-items-center">
+            <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
             <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен (или # домен)" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP" value="${UI.escape(ip)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
@@ -87,7 +88,8 @@ const UI = {
 
     routeCard: (name, group, files) => `
         <div class="route-item border border-secondary p-2 mb-2 rounded bg-dark position-relative shadow-sm">
-            <div class="d-flex mb-2">
+            <div class="d-flex mb-2 align-items-center">
+                <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
                 <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary route-name w-50 me-2 fw-bold" placeholder="Имя сета" value="${UI.escape(name)}" oninput="markConfigDirty()">
                 <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary route-group w-50 me-2" placeholder="В группу" value="${UI.escape(group)}" oninput="markConfigDirty()">
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
@@ -97,7 +99,8 @@ const UI = {
 
     groupCard: (name, content) => `
         <div class="group-item border border-secondary p-2 mb-2 rounded bg-dark position-relative shadow-sm">
-            <div class="d-flex mb-2">
+            <div class="d-flex mb-2 align-items-center">
+                <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
                 <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary group-name-input w-50 me-2 fw-bold" placeholder="Имя группы" value="${UI.escape(name)}" oninput="markConfigDirty()">
                 <button class="btn btn-sm btn-outline-danger ms-auto" onclick="this.closest('.group-item').remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
             </div>

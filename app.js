@@ -65,12 +65,11 @@ function markListDirty() { updateSaveButtonState(); }
 
 // === АВТОРЕСАЙЗ ТЕКСТОВЫХ ПОЛЕЙ ===
 function autoResizeTextarea(el) {
-    // Пропускаем главные большие редакторы (Сырой конфиг, Списки, Логи)
     if (['raw-config-text', 'list-content', 'log-content'].includes(el.id)) return;
     
-    el.style.overflow = 'hidden'; // Убираем мерцание скроллбара
-    el.style.height = 'auto'; // Сбрасываем высоту для корректного пересчета при удалении строк
-    el.style.height = (el.scrollHeight + 2) + 'px'; // Устанавливаем высоту по контенту + бордер
+    el.style.overflow = 'hidden'; 
+    el.style.height = 'auto'; 
+    el.style.height = (el.scrollHeight + 2) + 'px'; 
 }
 
 document.addEventListener('input', (e) => {
@@ -96,16 +95,15 @@ function switchSettingsMode(mode) {
         btnUI.className = 'btn btn-sm btn-outline-secondary'; 
         btnRaw.className = 'btn btn-sm btn-primary';
 
-        // Инициализируем редактор при первом открытии сырого режима
         if (!rawEditor) {
             CodeMirror.defineSimpleMode("smartdns", {
               start: [
                 {regex: /#.*/, token: "comment"},
-                {regex: /^(server(?:-[a-z0-9]+)?)\b/, token: "keyword"}, // server, server-https...
+                {regex: /^(server(?:-[a-z0-9]+)?)\b/, token: "keyword"}, 
                 {regex: /^(bind|cache-size|prefetch-domain|serve-expired|response-mode|speed-check-mode|log-level|address|domain-set|nameserver|ipset|nftset)\b/, token: "builtin"},
-                {regex: /-(group|bootstrap-dns|exclude-default-group|name|file|e)\b/, token: "attribute"}, // Флаги
-                {regex: /(?:https|tls|quic|h3|tcp):\/\/[^\s]+/, token: "string"}, // Ссылки
-                {regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/, token: "number"} // IP адреса
+                {regex: /-(group|bootstrap-dns|exclude-default-group|name|file|e)\b/, token: "attribute"}, 
+                {regex: /(?:https|tls|quic|h3|tcp):\/\/[^\s]+/, token: "string"}, 
+                {regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/, token: "number"} 
               ]
             });
             rawEditor = CodeMirror.fromTextArea(document.getElementById('raw-config-text'), {
@@ -114,19 +112,16 @@ function switchSettingsMode(mode) {
                 lineNumbers: true,
                 lineWrapping: true
             });
-            // Синхронизируем изменения с кнопкой сохранения
             rawEditor.on('change', () => {
                 document.getElementById('raw-config-text').value = rawEditor.getValue();
                 markConfigDirty();
             });
         }
         
-        // Загружаем актуальный текст и исправляем баг отрисовки
         rawEditor.setValue(configText);
         setTimeout(() => rawEditor.refresh(), 10);
 
     } else {
-        // Берем текст из раскрашенного редактора, если он инициализирован
         const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
         document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
         
@@ -137,6 +132,7 @@ function switchSettingsMode(mode) {
         
         setTimeout(() => {
             document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
+            initSortable();
         }, 10);
     }
     
@@ -208,7 +204,6 @@ async function validateConfigLogical(text) {
         }
 
         if (validServers.includes(cmd)) {
-            // ФИКС: добавлено (?:\s|^)
             const regex = /(?:\s|^)-group\s+([^\s]+)/g;
             let match;
             while ((match = regex.exec(line)) !== null) {
@@ -293,9 +288,9 @@ async function loadConfig() {
     }
     updateSaveButtonState();
     
-    // Подгоняем размеры блоков сразу после отрисовки конфига
     setTimeout(() => {
         document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
+        initSortable();
     }, 10);
 }
 
@@ -474,6 +469,22 @@ async function performUpdate() {
     setTimeout(() => {
         window.location.reload(true);
     }, 8000);
+}
+
+// === АКТИВАЦИЯ ПЕРЕТАСКИВАНИЯ (DRAG & DROP) ===
+function initSortable() {
+    const containers = ['dynamic-groups-container', 'dynamic-routes-container', 'dynamic-addresses-container'];
+    containers.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            Sortable.create(el, {
+                handle: '.drag-handle',
+                animation: 150,
+                ghostClass: 'bg-secondary',
+                onEnd: () => markConfigDirty()
+            });
+        }
+    });
 }
 
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
