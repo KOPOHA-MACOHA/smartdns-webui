@@ -164,7 +164,8 @@ async function validateConfigLogical(text) {
         }
 
         if (validServers.includes(cmd)) {
-            const regex = /-group\s+([^\s]+)/g;
+            // ФИКС: добавлено (?:\s|^)
+            const regex = /(?:\s|^)-group\s+([^\s]+)/g;
             let match;
             while ((match = regex.exec(line)) !== null) {
                 definedGroups.push(match[1]);

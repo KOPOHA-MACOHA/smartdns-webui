@@ -204,7 +204,7 @@ function parseConfigToSections(content) {
             else other.push(originalTrimmed);
         } else if (cmd === 'address') {
             let m = activeLine.match(/^address\s+\/([^\/]+)\/(.+)$/);
-            if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2].replace(/,/g, '') }); // Вырезаем запятые сразу при чтении
+            if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2].replace(/,/g, '') });
             else other.push(originalTrimmed);
         } else if (cmd === 'domain-set') {
             let m = activeLine.match(/-name\s+([\w-]+)\s+-file\s+(.+)$/);
@@ -222,18 +222,19 @@ function parseConfigToSections(content) {
             }
         } else if (['server', 'server-tls', 'server-https', 'server-quic', 'server-h3', 'server-tcp'].includes(cmd)) {
             
-            let groupMatch = activeLine.match(/-group\s+([^\s]+)/);
+            // ФИКС: Ищем -group только если перед ним пробел или начало строки
+            let groupMatch = activeLine.match(/(?:\s|^)-group\s+([^\s]+)/);
             
             if (activeLine.includes('-bootstrap-dns')) {
                 bootstrap.push(originalTrimmed);
             } else if (groupMatch) {
                 if (groupMatch[1] === 'fallback') {
-                    fallback.push(originalTrimmed); // Выделяем fallback в отдельный блок
+                    fallback.push(originalTrimmed); 
                 } else {
                     group.push(originalTrimmed);
                 }
             } else {
-                upstream.push(originalTrimmed); // Основные Upstream без группы
+                upstream.push(originalTrimmed);
             }
 
         } else if (['ipset', 'nftset'].includes(cmd)) {
@@ -244,12 +245,12 @@ function parseConfigToSections(content) {
     });
 
     let bsClean = bootstrap.map(l => cleanDns(l, ['-bootstrap-dns']));
-    let upClean = upstream.map(l => cleanDns(l, ['-exclude-default-group', '-e'])); // На всякий случай чистим, если кто-то вписал руками
+    let upClean = upstream.map(l => cleanDns(l, ['-exclude-default-group', '-e']));
     let fallbackClean = fallback.map(l => cleanDns(l, ['-exclude-default-group', '-e', '-group fallback']));
     
     let groupsObj = {};
     group.forEach(line => {
-        let m = line.match(/-group\s+([^\s]+)/);
+        let m = line.match(/(?:\s|^)-group\s+([^\s]+)/);
         if (m) {
             if (!groupsObj[m[1]]) groupsObj[m[1]] = [];
             groupsObj[m[1]].push(cleanDns(line, [new RegExp(`-group\\s+${m[1]}`), '-exclude-default-group', '-e']));
