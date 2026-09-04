@@ -3,16 +3,15 @@ window.formatDns = function(url, suffix) {
     let isComment = url.startsWith('#');
     if (isComment) url = url.replace(/^#+\s*/, '');
     
-    let prefix = 'server';
-    if (url.startsWith('https://')) prefix = 'server-https';
-    else if (url.startsWith('tls://')) prefix = 'server-tls';
-    else if (url.startsWith('quic://') || url.startsWith('doq://')) prefix = 'server-quic';
-    else if (url.startsWith('h3://')) prefix = 'server-h3';
-    else if (url.startsWith('tcp://')) prefix = 'server-tcp';
-    
-    // Защита от дублирования, если юзер вписал приставку вручную
-    if (url.match(/^server(?:-[a-z0-9]+)?\s+/)) {
-        prefix = '';
+    let prefix = '';
+    // Если юзер УЖЕ написал server или server-h3 вручную, не добавляем дубликат
+    if (!url.match(/^server(?:-[a-z0-9]+)?\s+/)) {
+        prefix = 'server';
+        if (url.startsWith('https://')) prefix = 'server-https';
+        else if (url.startsWith('tls://')) prefix = 'server-tls';
+        else if (url.startsWith('quic://') || url.startsWith('doq://')) prefix = 'server-quic';
+        else if (url.startsWith('h3://')) prefix = 'server-h3';
+        else if (url.startsWith('tcp://')) prefix = 'server-tcp';
     }
     
     let result = prefix ? `${prefix} ${url} ${suffix}`.trim() : `${url} ${suffix}`.trim();
@@ -23,16 +22,30 @@ window.cleanDns = function(line, suffixesToRemove) {
     let isComment = line.startsWith('#');
     if (isComment) line = line.replace(/^#+\s*/, '');
     
-    // Добавлена цифра 0-9 для корректной работы с server-h3
-    let cleaned = line.replace(/^server(?:-[a-z0-9]+)?\s+/, '');
-    if (Array.isArray(suffixesToRemove)) {
-        suffixesToRemove.forEach(s => cleaned = cleaned.replace(new RegExp(s, 'g'), ''));
-    } else {
-        cleaned = cleaned.replace(suffixesToRemove, '');
+    let match = line.match(/^server(?:-([a-z0-9]+))?\s+(.+)/);
+    if (match) {
+        let type = match[1]; 
+        let rest = match[2]; 
+
+        if (!type) { 
+            line = rest;
+        } else if (rest.includes('://')) { 
+            line = rest;
+        }
     }
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
     
-    return isComment ? `# ${cleaned}` : cleaned;
+    if (Array.isArray(suffixesToRemove)) {
+        suffixesToRemove.forEach(s => {
+            // Защита: если удаляем "-e", чтобы не отрезало кусок от "-exclude-default-group"
+            if (s === '-e') line = line.replace(/\s+-e\b/g, '');
+            else line = line.replace(new RegExp(s, 'g'), '');
+        });
+    } else {
+        line = line.replace(suffixesToRemove, '');
+    }
+    line = line.replace(/\s+/g, ' ').trim();
+    
+    return isComment ? `# ${line}` : line;
 }
 
 // === ГЕНЕРАТОРЫ HTML КАРТОЧЕК ===
@@ -159,7 +172,6 @@ function parseConfigToSections(content) {
         const originalTrimmed = line.trim();
         if (!originalTrimmed) return;
         
-        // Отбрасываем визуальные разделители (генерируются заново)
         if (originalTrimmed.match(/^#{3,}$/) || originalTrimmed.match(/^# [^#]+ #$/)) return;
 
         let isComment = originalTrimmed.startsWith('#');
@@ -167,7 +179,7 @@ function parseConfigToSections(content) {
         
         const matchCmd = activeLine.match(/^([^\s]+)/);
         if (!matchCmd) {
-            other.push(originalTrimmed); // Обычные текстовые комментарии
+            other.push(originalTrimmed);
             return;
         }
         
@@ -209,9 +221,18 @@ function parseConfigToSections(content) {
                 other.push(originalTrimmed);
             }
         } else if (['server', 'server-tls', 'server-https', 'server-quic', 'server-h3', 'server-tcp'].includes(cmd)) {
-            if (activeLine.includes('-bootstrap-dns')) bootstrap.push(originalTrimmed);
-            else if (activeLine.includes('-group') && !activeLine.includes('-group fallback')) group.push(originalTrimmed);
-            else upstream.push(originalTrimmed); 
+            
+            // ФИКС: Ищем точное совпадение "-group ИМЯ", чтобы не путать с "-exclude-default-group"
+            let groupMatch = activeLine.match(/-group\s+([^\s]+)/);
+            
+            if (activeLine.includes('-bootstrap-dns')) {
+                bootstrap.push(originalTrimmed);
+            } else if (groupMatch && groupMatch[1] !== 'fallback') {
+                group.push(originalTrimmed);
+            } else {
+                upstream.push(originalTrimmed); 
+            }
+
         } else if (['ipset', 'nftset'].includes(cmd)) {
             routing.push(originalTrimmed); 
         } else {
@@ -220,7 +241,7 @@ function parseConfigToSections(content) {
     });
 
     let bsClean = bootstrap.map(l => cleanDns(l, /-bootstrap-dns/g));
-    let upClean = upstream.map(l => cleanDns(l, ['-e', '-group fallback']));
+    let upClean = upstream.map(l => cleanDns(l, ['-exclude-default-group', '-e', '-group fallback']));
     
     let groupsObj = {};
     group.forEach(line => {
@@ -240,7 +261,7 @@ function parseConfigToSections(content) {
         <div class="col-md-6">
             ${UI.coreCard(coreData, coreLines)}
             ${UI.card('Bootstrap DNS', 'bootstrap', bsClean, 'Закомментируйте (#) любой адрес, чтобы временно выключить его.')}
-            ${UI.card('Вышестоящие и Резервные DNS', 'upstream', upClean, 'Автоматически получат суффикс <b>-e -group fallback</b>.')}
+            ${UI.card('Вышестоящие и Резервные DNS', 'upstream', upClean, 'Автоматически получат суффикс <b>-exclude-default-group -group fallback</b>.')}
             ${UI.logCard(logging.level)}
         </div>
         <div class="col-md-6">
@@ -311,7 +332,7 @@ function gatherSectionsText() {
     const upEl = document.getElementById('sec-upstream');
     if (upEl && upEl.value.trim()) {
         text += `##########\n# Вышестоящие и Резервные DNS #\n##########\n`;
-        upEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '-e -group fallback') + '\n'; });
+        upEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '-exclude-default-group -group fallback') + '\n'; });
         text += '\n';
     }
 
