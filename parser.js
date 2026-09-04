@@ -4,7 +4,6 @@ window.formatDns = function(url, suffix) {
     if (isComment) url = url.replace(/^#+\s*/, '');
     
     let prefix = '';
-    // Если юзер УЖЕ написал server или server-h3 вручную, не добавляем дубликат
     if (!url.match(/^server(?:-[a-z0-9]+)?\s+/)) {
         prefix = 'server';
         if (url.startsWith('https://')) prefix = 'server-https';
@@ -36,12 +35,13 @@ window.cleanDns = function(line, suffixesToRemove) {
     
     if (Array.isArray(suffixesToRemove)) {
         suffixesToRemove.forEach(s => {
-            // Защита: если удаляем "-e", чтобы не отрезало кусок от "-exclude-default-group"
             if (s === '-e') line = line.replace(/\s+-e\b/g, '');
+            else if (s instanceof RegExp) line = line.replace(s, '');
             else line = line.replace(new RegExp(s, 'g'), '');
         });
     } else {
-        line = line.replace(suffixesToRemove, '');
+        if (suffixesToRemove === '-e') line = line.replace(/\s+-e\b/g, '');
+        else line = line.replace(suffixesToRemove, '');
     }
     line = line.replace(/\s+/g, ' ').trim();
     
@@ -80,8 +80,8 @@ const UI = {
 
     addressRow: (domain, ip) => `
         <div class="address-item d-flex mb-2">
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен (или # домен)" value="${UI.escape(domain)}" oninput="markConfigDirty()">
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP" value="${UI.escape(ip)}" oninput="markConfigDirty()">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен (или # домен)" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP" value="${UI.escape(ip)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
         </div>`,
 
@@ -162,7 +162,7 @@ window.addNewRouteUI = () => {
 
 // === ОСНОВНОЙ ПАРСЕР ===
 function parseConfigToSections(content) {
-    let coreLines = [], bootstrap = [], upstream = [], group = [], routing = [], other = [];
+    let coreLines = [], bootstrap = [], upstream = [], fallback = [], group = [], routing = [], other = [];
     let addresses = [];
     let routesObj = {}; 
     let logging = { level: 'notice' };
@@ -204,7 +204,7 @@ function parseConfigToSections(content) {
             else other.push(originalTrimmed);
         } else if (cmd === 'address') {
             let m = activeLine.match(/^address\s+\/([^\/]+)\/(.+)$/);
-            if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2] });
+            if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2].replace(/,/g, '') }); // Вырезаем запятые сразу при чтении
             else other.push(originalTrimmed);
         } else if (cmd === 'domain-set') {
             let m = activeLine.match(/-name\s+([\w-]+)\s+-file\s+(.+)$/);
@@ -222,15 +222,18 @@ function parseConfigToSections(content) {
             }
         } else if (['server', 'server-tls', 'server-https', 'server-quic', 'server-h3', 'server-tcp'].includes(cmd)) {
             
-            // ФИКС: Ищем точное совпадение "-group ИМЯ", чтобы не путать с "-exclude-default-group"
             let groupMatch = activeLine.match(/-group\s+([^\s]+)/);
             
             if (activeLine.includes('-bootstrap-dns')) {
                 bootstrap.push(originalTrimmed);
-            } else if (groupMatch && groupMatch[1] !== 'fallback') {
-                group.push(originalTrimmed);
+            } else if (groupMatch) {
+                if (groupMatch[1] === 'fallback') {
+                    fallback.push(originalTrimmed); // Выделяем fallback в отдельный блок
+                } else {
+                    group.push(originalTrimmed);
+                }
             } else {
-                upstream.push(originalTrimmed); 
+                upstream.push(originalTrimmed); // Основные Upstream без группы
             }
 
         } else if (['ipset', 'nftset'].includes(cmd)) {
@@ -240,15 +243,16 @@ function parseConfigToSections(content) {
         }
     });
 
-    let bsClean = bootstrap.map(l => cleanDns(l, /-bootstrap-dns/g));
-    let upClean = upstream.map(l => cleanDns(l, ['-exclude-default-group', '-e', '-group fallback']));
+    let bsClean = bootstrap.map(l => cleanDns(l, ['-bootstrap-dns']));
+    let upClean = upstream.map(l => cleanDns(l, ['-exclude-default-group', '-e'])); // На всякий случай чистим, если кто-то вписал руками
+    let fallbackClean = fallback.map(l => cleanDns(l, ['-exclude-default-group', '-e', '-group fallback']));
     
     let groupsObj = {};
     group.forEach(line => {
         let m = line.match(/-group\s+([^\s]+)/);
         if (m) {
             if (!groupsObj[m[1]]) groupsObj[m[1]] = [];
-            groupsObj[m[1]].push(cleanDns(line, new RegExp(`-group\\s+${m[1]}`, 'g')));
+            groupsObj[m[1]].push(cleanDns(line, [new RegExp(`-group\\s+${m[1]}`), '-exclude-default-group', '-e']));
         }
     });
 
@@ -261,7 +265,8 @@ function parseConfigToSections(content) {
         <div class="col-md-6">
             ${UI.coreCard(coreData, coreLines)}
             ${UI.card('Bootstrap DNS', 'bootstrap', bsClean, 'Закомментируйте (#) любой адрес, чтобы временно выключить его.')}
-            ${UI.card('Вышестоящие и Резервные DNS', 'upstream', upClean, 'Автоматически получат суффикс <b>-exclude-default-group -group fallback</b>.')}
+            ${UI.card('Вышестоящие DNS (Основная группа)', 'upstream', upClean, 'Серверы по умолчанию (без привязки к группам).')}
+            ${UI.card('Резервные DNS (Fallback)', 'fallback', fallbackClean, 'Автоматически получат суффикс <b>-exclude-default-group -group fallback</b>.')}
             ${UI.logCard(logging.level)}
         </div>
         <div class="col-md-6">
@@ -331,8 +336,15 @@ function gatherSectionsText() {
 
     const upEl = document.getElementById('sec-upstream');
     if (upEl && upEl.value.trim()) {
-        text += `##########\n# Вышестоящие и Резервные DNS #\n##########\n`;
-        upEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '-exclude-default-group -group fallback') + '\n'; });
+        text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`;
+        upEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '') + '\n'; });
+        text += '\n';
+    }
+
+    const fbEl = document.getElementById('sec-fallback');
+    if (fbEl && fbEl.value.trim()) {
+        text += `##########\n# Резервные DNS (Fallback) #\n##########\n`;
+        fbEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '-exclude-default-group -group fallback') + '\n'; });
         text += '\n';
     }
 
@@ -343,7 +355,7 @@ function gatherSectionsText() {
             let name = item.querySelector('.group-name-input').value.trim();
             let content = item.querySelector('.group-content-input').value.trim();
             if (name && content) {
-                content.split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), `-group ${name}`) + '\n'; });
+                content.split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), `-exclude-default-group -group ${name}`) + '\n'; });
             }
         });
         text += '\n';
@@ -376,8 +388,8 @@ function gatherSectionsText() {
     if (addrItems.length > 0) {
         text += `##########\n# Локальные адреса (Статика) #\n##########\n`;
         addrItems.forEach(item => {
-            let domain = item.querySelector('.addr-domain').value.trim();
-            let ip = item.querySelector('.addr-ip').value.trim();
+            let domain = item.querySelector('.addr-domain').value.trim().replace(/,/g, '');
+            let ip = item.querySelector('.addr-ip').value.trim().replace(/,/g, '');
             if (domain && ip) {
                 let isComment = domain.startsWith('#');
                 if (isComment) domain = domain.replace(/^#+\s*/, '');
