@@ -3,6 +3,13 @@ let activeList = '';
 let currentSettingsMode = 'ui'; 
 let isTestMode = false;
 
+let rawEditor = null; // Глобальная переменная для редактора с подсветкой
+
+function resetToHome() {
+    switchTab('settings', null, true);
+    switchSettingsMode('ui');
+}
+
 let originalConfigContent = ''; 
 let originalListContent = '';
 
@@ -81,16 +88,53 @@ function switchSettingsMode(mode) {
     const btnRaw = document.getElementById('btn-mode-raw');
 
     if (mode === 'raw') {
-        document.getElementById('raw-config-text').value = gatherSectionsText();
-        uiView.style.display = 'none'; rawView.style.display = 'block';
-        btnUI.className = 'btn btn-sm btn-outline-secondary'; btnRaw.className = 'btn btn-sm btn-primary';
-    } else {
-        const rawContent = document.getElementById('raw-config-text').value;
-        document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
-        uiView.style.display = 'block'; rawView.style.display = 'none';
-        btnUI.className = 'btn btn-sm btn-primary'; btnRaw.className = 'btn btn-sm btn-outline-secondary';
+        const configText = gatherSectionsText();
+        document.getElementById('raw-config-text').value = configText;
         
-        // Подгоняем размеры блоков после возврата в визуальный режим
+        uiView.style.display = 'none'; 
+        rawView.style.display = 'block';
+        btnUI.className = 'btn btn-sm btn-outline-secondary'; 
+        btnRaw.className = 'btn btn-sm btn-primary';
+
+        // Инициализируем редактор при первом открытии сырого режима
+        if (!rawEditor) {
+            CodeMirror.defineSimpleMode("smartdns", {
+              start: [
+                {regex: /#.*/, token: "comment"},
+                {regex: /^(server(?:-[a-z0-9]+)?)\b/, token: "keyword"}, // server, server-https...
+                {regex: /^(bind|cache-size|prefetch-domain|serve-expired|response-mode|speed-check-mode|log-level|address|domain-set|nameserver|ipset|nftset)\b/, token: "builtin"},
+                {regex: /-(group|bootstrap-dns|exclude-default-group|name|file|e)\b/, token: "attribute"}, // Флаги
+                {regex: /(?:https|tls|quic|h3|tcp):\/\/[^\s]+/, token: "string"}, // Ссылки
+                {regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/, token: "number"} // IP адреса
+              ]
+            });
+            rawEditor = CodeMirror.fromTextArea(document.getElementById('raw-config-text'), {
+                mode: "smartdns",
+                theme: "dracula",
+                lineNumbers: true,
+                lineWrapping: true
+            });
+            // Синхронизируем изменения с кнопкой сохранения
+            rawEditor.on('change', () => {
+                document.getElementById('raw-config-text').value = rawEditor.getValue();
+                markConfigDirty();
+            });
+        }
+        
+        // Загружаем актуальный текст и исправляем баг отрисовки
+        rawEditor.setValue(configText);
+        setTimeout(() => rawEditor.refresh(), 10);
+
+    } else {
+        // Берем текст из раскрашенного редактора, если он инициализирован
+        const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
+        document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
+        
+        uiView.style.display = 'block'; 
+        rawView.style.display = 'none';
+        btnUI.className = 'btn btn-sm btn-primary'; 
+        btnRaw.className = 'btn btn-sm btn-outline-secondary';
+        
         setTimeout(() => {
             document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
         }, 10);
