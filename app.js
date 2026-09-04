@@ -473,7 +473,7 @@ async function performUpdate() {
     
     setTimeout(() => {
         window.location.reload(true);
-    }, 4000);
+    }, 8000);
 }
 
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
