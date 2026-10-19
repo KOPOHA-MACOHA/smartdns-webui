@@ -142,33 +142,67 @@ handle_api() {
             [ -z "$LATEST" ] && LATEST="$CURRENT_VERSION"
             echo "${CURRENT_VERSION}|${LATEST}"
             ;;
+        "get_update_status")
+            UPDATE_STATUS="/opt/tmp/smartdns-webui-update.status"
+            if [ -f "$UPDATE_STATUS" ]; then
+                cat "$UPDATE_STATUS"
+            else
+                echo "IDLE"
+            fi
+            ;;
         "do_update")
-            # Download to a temporary file, validate it, then execute; keep a log for diagnosis.
-            (
+            if [ "$TEST_MODE" = "1" ]; then
+                echo "ERROR: update disabled in test mode"
+            elif ! mkdir -p /opt/tmp /opt/var/log 2>/dev/null; then
+                echo "ERROR: cannot create update directories"
+            elif ! mkdir /opt/tmp/smartdns-webui-update.lock 2>/dev/null; then
+                echo "ERROR: update already running"
+            else
+                UPDATE_STATUS="/opt/tmp/smartdns-webui-update.status"
+                UPDATE_LOCK="/opt/tmp/smartdns-webui-update.lock"
                 UPDATE_TMP="/opt/tmp/smartdns-webui-update-$.sh"
                 UPDATE_LOG="/opt/var/log/smartdns-webui-update.log"
-                mkdir -p /opt/tmp /opt/var/log 2>/dev/null
-                echo "[$(date)] Update started" > "$UPDATE_LOG"
-                if ! curl -fsSL --connect-timeout 15 --max-time 120 "${REPO_URL}/install.sh?t=$(date +%s)" -o "$UPDATE_TMP"; then
-                    echo "[$(date)] ERROR: installer download failed" >> "$UPDATE_LOG"
+                printf 'RUNNING\n' > "${UPDATE_STATUS}.tmp.$" &&
+                    mv -f "${UPDATE_STATUS}.tmp.$" "$UPDATE_STATUS" || {
+                        rm -rf "$UPDATE_LOCK"
+                        echo "ERROR: cannot write update status"
+                        return 1
+                    }
+                (
+                    set -u
+                    finish_update() {
+                        rc=$?
+                        if [ "$rc" -ne 0 ]; then
+                            printf 'ERROR\n' > "${UPDATE_STATUS}.tmp.$"
+                            mv -f "${UPDATE_STATUS}.tmp.$" "$UPDATE_STATUS"
+                        fi
+                        rm -rf "$UPDATE_LOCK"
+                    }
+                    trap finish_update EXIT
+                    echo "[$(date)] Update started" > "$UPDATE_LOG"
+                    if ! curl -fsSL --connect-timeout 15 --max-time 120 "${REPO_URL}/install.sh?t=$(date +%s)" -o "$UPDATE_TMP"; then
+                        echo "[$(date)] ERROR: installer download failed" >> "$UPDATE_LOG"
+                        rm -f "$UPDATE_TMP"
+                        exit 1
+                    fi
+                    if [ ! -s "$UPDATE_TMP" ] || ! sh -n "$UPDATE_TMP"; then
+                        echo "[$(date)] ERROR: installer is empty or has shell syntax errors" >> "$UPDATE_LOG"
+                        rm -f "$UPDATE_TMP"
+                        exit 1
+                    fi
+                    if sh "$UPDATE_TMP" >> "$UPDATE_LOG" 2>&1; then
+                        echo "[$(date)] Update completed successfully" >> "$UPDATE_LOG"
+                        printf 'SUCCESS\n' > "${UPDATE_STATUS}.tmp.$"
+                        mv -f "${UPDATE_STATUS}.tmp.$" "$UPDATE_STATUS"
+                    else
+                        echo "[$(date)] ERROR: update failed" >> "$UPDATE_LOG"
+                        rm -f "$UPDATE_TMP"
+                        exit 1
+                    fi
                     rm -f "$UPDATE_TMP"
-                    exit 1
-                fi
-                if [ ! -s "$UPDATE_TMP" ] || ! sh -n "$UPDATE_TMP"; then
-                    echo "[$(date)] ERROR: installer is empty or has shell syntax errors" >> "$UPDATE_LOG"
-                    rm -f "$UPDATE_TMP"
-                    exit 1
-                fi
-                if sh "$UPDATE_TMP" >> "$UPDATE_LOG" 2>&1; then
-                    echo "[$(date)] Update completed successfully" >> "$UPDATE_LOG"
-                else
-                    echo "[$(date)] ERROR: update failed" >> "$UPDATE_LOG"
-                    rm -f "$UPDATE_TMP"
-                    exit 1
-                fi
-                rm -f "$UPDATE_TMP"
-            ) >/dev/null 2>&1 &
-            echo "OK"
+                ) </dev/null >/dev/null 2>&1 &
+                echo "OK"
+            fi
             ;;
         *)
             echo "ERROR: unsupported action"
