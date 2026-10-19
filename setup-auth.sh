@@ -14,6 +14,7 @@ TMP_FILE="$AUTH_FILE.tmp.$$"
 BACKUP_FILE="$AUTH_FILE.bak"
 
 cleanup() {
+    stty echo 2>/dev/null || true
     rm -f "$TMP_FILE"
 }
 trap cleanup EXIT
