@@ -125,6 +125,7 @@ function switchSettingsMode(mode) {
         const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
         document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
         if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
+        if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
         
         uiView.style.display = 'block'; 
         rawView.style.display = 'none';
@@ -602,6 +603,52 @@ function initSortable() {
     });
 }
 
+// Theme preference
+window.toggleTheme = function() {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('smartdns-ui-theme', next); } catch (_) {}
+    const button = document.getElementById('theme-toggle');
+    if (button) {
+        button.innerHTML = next === 'dark' ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon-stars"></i>';
+        button.title = next === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
+        button.setAttribute('aria-label', button.title);
+    }
+};
+(function initTheme() {
+    let saved = 'light';
+    try { saved = localStorage.getItem('smartdns-ui-theme') || 'light'; } catch (_) {}
+    document.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
+    const applyIcon = () => {
+        const button = document.getElementById('theme-toggle');
+        if (!button) return;
+        button.innerHTML = saved === 'dark' ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon-stars"></i>';
+        button.title = saved === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
+        button.setAttribute('aria-label', button.title);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyIcon); else applyIcon();
+})();
+
+window.refreshRouteFileOptions = async function() {
+    const selects = Array.from(document.querySelectorAll('.route-file-select'));
+    if (!selects.length) return;
+    let names = [];
+    try { names = (await apiCall('get_lists')).split('\n').map(name => name.trim()).filter(Boolean); } catch (_) { return; }
+    selects.forEach(select => {
+        const current = select.value || select.dataset.currentPath || '';
+        const options = ['<option value="">Выберите список…</option>'];
+        names.forEach(name => {
+            const path = name.startsWith('/') ? name : '/opt/etc/smartdns/domains/' + name;
+            options.push('<option value="' + UI.escape(path) + '">' + UI.escape(name) + '</option>');
+        });
+        const currentExists = names.some(name => current === name || current === (name.startsWith('/') ? name : '/opt/etc/smartdns/domains/' + name));
+        if (current && !currentExists) options.push('<option value="' + UI.escape(current) + '">' + UI.escape(current) + ' (путь из конфига)</option>');
+        select.innerHTML = options.join('');
+        select.value = current;
+        select.dataset.currentPath = current;
+    });
+};
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
 function initApp() {
     const path = window.location.pathname.replace('/', '');
