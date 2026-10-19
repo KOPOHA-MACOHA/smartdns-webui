@@ -69,13 +69,13 @@ const UI = {
         const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
         const endpoint = [parts.address || '', parts.port ? ':' + parts.port : '', ['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : ''].join('');
         const protocol = /^#/.test(raw) ? 'Отключён' : (labels[parts.type] || 'DNS');
-        return \`<div class="dns-server-row d-flex align-items-center gap-3">
-            <span class="dns-protocol">\${UI.escape(protocol)}</span>
-            <span class="dns-endpoint flex-grow-1 text-truncate" title="\${UI.escape(endpoint)}">\${UI.escape(endpoint)}</span>
-            <input type="hidden" class="dns-value" value="\${UI.escape(displayValue)}">
+        return `<div class="dns-server-row d-flex align-items-center gap-3">
+            <span class="dns-protocol">${UI.escape(protocol)}</span>
+            <span class="dns-endpoint flex-grow-1 text-truncate" title="${UI.escape(endpoint)}">${UI.escape(endpoint)}</span>
+            <input type="hidden" class="dns-value" value="${UI.escape(displayValue)}">
             <button type="button" class="icon-action" onclick="openDnsModal(this.closest('.dns-server-list'), this.closest('.dns-server-row'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button type="button" class="icon-action danger" onclick="this.closest('.dns-server-row').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button>
-        </div>\`;
+        </div>`;
     },
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
