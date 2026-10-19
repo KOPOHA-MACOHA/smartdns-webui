@@ -1,0 +1,37 @@
+name: Shell validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+
+      - name: Check POSIX shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f \( -name '*.sh' -o -name '*.cgi' \) \
+            -not -path './.git/*' -print0 |
+            while IFS= read -r -d '' file; do
+              echo "Checking syntax: $file"
+              sh -n "$file"
+            done
+
+      - name: Run ShellCheck on shell scripts and CGI entry points
+        run: |
+          find . -type f \( -name '*.sh' -o -name '*.cgi' \) \
+            -not -path './.git/*' -print0 |
+            xargs -0 shellcheck --severity=error
