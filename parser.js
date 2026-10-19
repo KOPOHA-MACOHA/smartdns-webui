@@ -7,8 +7,10 @@ window.formatDns = function(url, suffix) {
     if (!url.match(/^server(?:-[a-z0-9]+)?\s+/)) {
         prefix = 'server';
         if (url.startsWith('https://')) prefix = 'server-https';
+        else if (url.startsWith('dot://')) { url = url.slice(6); prefix = 'server-tls'; }
         else if (url.startsWith('tls://')) prefix = 'server-tls';
-        else if (url.startsWith('quic://') || url.startsWith('doq://')) prefix = 'server-quic';
+        else if (url.startsWith('doq://')) { url = url.slice(6); prefix = 'server-quic'; }
+        else if (url.startsWith('quic://')) prefix = 'server-quic';
         else if (url.startsWith('h3://')) prefix = 'server-h3';
         else if (url.startsWith('tcp://')) prefix = 'server-tcp';
     }
@@ -28,6 +30,10 @@ window.cleanDns = function(line, suffixesToRemove) {
 
         if (!type) { 
             line = rest;
+        } else if (type === 'tls' && !rest.includes('://')) { 
+            line = 'dot://' + rest;
+        } else if (type === 'quic' && !rest.includes('://')) {
+            line = 'doq://' + rest;
         } else if (rest.includes('://')) { 
             line = rest;
         }
@@ -278,8 +284,8 @@ window.addDnsServerFromModal = function() {
     const path = document.getElementById('dns-path').value.trim() || '/dns-query';
     if (!address) { alert('Укажите адрес DNS-сервера.'); return; }
     let line;
-    if (type === 'dot') line = 'server-tls ' + address + (port ? ':' + port : '');
-    else if (type === 'doq') line = 'server-quic ' + address + (port ? ':' + port : '');
+    if (type === 'dot') line = 'dot://' + address + (port ? ':' + port : '');
+    else if (type === 'doq') line = 'doq://' + address + (port ? ':' + port : '');
     else if (type === 'doh') line = 'server-https https://' + address + (port ? ':' + port : '') + path;
     else if (type === 'h3') line = 'server-h3 h3://' + address + (port ? ':' + port : '') + path;
     else if (type === 'tcp') line = 'server-tcp ' + address + (port ? ':' + port : '');
