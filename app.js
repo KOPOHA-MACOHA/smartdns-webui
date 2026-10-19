@@ -336,6 +336,7 @@ async function loadConfig() {
     const content = await apiCall('get_config');
     document.getElementById('config-sections').innerHTML = parseConfigToSections(content);
     if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
+    if (typeof refreshRouteFileOptions === 'function') await refreshRouteFileOptions();
     
     const normalized = gatherSectionsText();
     originalConfigContent = currentSettingsMode === 'ui' ? normalized : content;
