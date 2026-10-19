@@ -85,7 +85,7 @@ acquire_update_lock() {
         # Publish the request owner's PID immediately, closing the window
         # where a concurrent request could mistake a newly-created lock
         # for an abandoned one.
-        printf '%s\\n' "$" > "$UPDATE_LOCK/pid" || {
+        printf '%s\n' "$$" > "$UPDATE_LOCK/pid" || {
             rm -rf "$UPDATE_LOCK"
             return 1
         }
@@ -97,7 +97,7 @@ acquire_update_lock() {
     if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
         rm -rf "$UPDATE_LOCK"
         if mkdir "$UPDATE_LOCK" 2>/dev/null; then
-            printf '%s\\n' "$" > "$UPDATE_LOCK/pid" || {
+            printf '%s\n' "$$" > "$UPDATE_LOCK/pid" || {
                 rm -rf "$UPDATE_LOCK"
                 return 1
             }
@@ -117,7 +117,7 @@ acquire_update_lock() {
                 if [ "$((NOW - LOCK_MTIME))" -ge 300 ]; then
                     rm -rf "$UPDATE_LOCK"
                     if mkdir "$UPDATE_LOCK" 2>/dev/null; then
-                        printf '%s\\n' "$" > "$UPDATE_LOCK/pid" || {
+                        printf '%s\n' "$$" > "$UPDATE_LOCK/pid" || {
                             rm -rf "$UPDATE_LOCK"
                             return 1
                         }
