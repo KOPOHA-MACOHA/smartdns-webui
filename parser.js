@@ -118,7 +118,7 @@ const UI = {
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <div class="editable-name route-editable-name flex-grow-1">
                     <span class="route-name-display fw-semibold">${UI.escape(name || 'Новый маршрут')}</span>
-                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty()" onkeydown="if(event.key==='Enter'){event.preventDefault();toggleInlineEdit(this.parentElement.querySelector('button'))}">
+                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty()" onblur="finishInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
@@ -141,7 +141,7 @@ const UI = {
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <div class="editable-name group-editable-name flex-grow-1">
                     <span class="group-name-display fw-semibold">${UI.escape(name || 'Новая DNS-группа')}</span>
-                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onkeydown="if(event.key==='Enter'){event.preventDefault();toggleInlineEdit(this.parentElement.querySelector('button'))}">
+                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onblur="finishInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
@@ -225,17 +225,22 @@ window.addRouteFileUI = function(button) {
 window.toggleInlineEdit = function(button) {
     const wrapper = button.closest('.editable-name');
     if (!wrapper) return;
+    if (wrapper.classList.contains('is-editing')) { finishInlineEdit(wrapper.querySelector('input')); return; }
+    wrapper.classList.add('is-editing');
     const input = wrapper.querySelector('input');
-    const display = wrapper.querySelector('span');
-    const editing = input.classList.contains('d-none');
-    input.classList.toggle('d-none', !editing);
-    display.classList.toggle('d-none', editing);
-    button.innerHTML = editing ? '<i class="bi bi-check2"></i>' : '<i class="bi bi-pencil"></i>';
-    button.title = editing ? 'Готово' : 'Переименовать';
-    if (editing) { input.focus(); input.select(); }
-    else { input.blur(); markConfigDirty(); }
+    input.dataset.originalValue = input.value;
+    input.focus(); input.select();
 };
-
+window.finishInlineEdit = function(input, cancel = false) {
+    if (!input) return;
+    const wrapper = input.closest('.editable-name');
+    if (!wrapper || !wrapper.classList.contains('is-editing')) return;
+    if (cancel) input.value = input.dataset.originalValue || '';
+    wrapper.classList.remove('is-editing');
+    updateInlineName(input);
+    if (input.classList.contains('group-name-input')) renameDnsGroup(input);
+    markConfigDirty();
+};
 window.updateInlineName = function(input) {
     const display = input.parentElement.querySelector('span');
     if (display) display.textContent = input.value.trim() || (input.classList.contains('group-name-input') ? 'Новая DNS-группа' : 'Новый маршрут');
