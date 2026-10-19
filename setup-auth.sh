@@ -4,6 +4,7 @@
 # or change the Unix/Entware root password.
 
 set -eu
+umask 077
 
 AUTH_DIR="/opt/etc/lighttpd"
 AUTH_FILE="$AUTH_DIR/smartdns-webui.htpasswd"
@@ -12,10 +13,19 @@ LIGHTTPD_INIT="/opt/etc/init.d/S80lighttpd"
 LIGHTTPD_BIN="/opt/sbin/lighttpd"
 TMP_FILE="$AUTH_FILE.tmp.$$"
 BACKUP_FILE="$AUTH_FILE.bak"
+HAD_AUTH=0
 
 cleanup() {
     stty echo 2>/dev/null || true
     rm -f "$TMP_FILE"
+}
+
+restore_auth() {
+    if [ "$HAD_AUTH" = "1" ]; then
+        cp -p "$BACKUP_FILE" "$AUTH_FILE" || echo "ERROR: не удалось восстановить прежний файл авторизации" >&2
+    else
+        rm -f "$AUTH_FILE"
+    fi
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
@@ -79,18 +89,17 @@ chown "root:$LIGHTTPD_GROUP" "$TMP_FILE" 2>/dev/null || {
 
 if [ -f "$AUTH_FILE" ]; then
     cp -p "$AUTH_FILE" "$BACKUP_FILE" || fail "не удалось сохранить старый файл авторизации"
+    HAD_AUTH=1
 fi
 mv -f "$TMP_FILE" "$AUTH_FILE" || fail "не удалось установить файл авторизации"
 
 if ! "$LIGHTTPD_BIN" -tt -f "$LIGHTTPD_CONF"; then
-    [ ! -f "$BACKUP_FILE" ] || cp -p "$BACKUP_FILE" "$AUTH_FILE"
-    [ -f "$BACKUP_FILE" ] || rm -f "$AUTH_FILE"
+    restore_auth
     fail "проверка конфигурации lighttpd не пройдена; предыдущий файл восстановлен"
 fi
 
 if ! "$LIGHTTPD_INIT" restart; then
-    [ ! -f "$BACKUP_FILE" ] || cp -p "$BACKUP_FILE" "$AUTH_FILE"
-    [ -f "$BACKUP_FILE" ] || rm -f "$AUTH_FILE"
+    restore_auth
     "$LIGHTTPD_INIT" restart || true
     fail "lighttpd не перезапустился; предыдущий файл авторизации восстановлен"
 fi
