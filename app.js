@@ -516,14 +516,26 @@ async function checkUpdate() {
     }
     
     const [current, latest] = res.trim().split('|');
-    verText.innerText = current; 
-    
-    if (latest && latest !== current && !latest.includes('<')) {
+    verText.innerText = current;
+    btn.disabled = true;
+    btn.classList.remove('btn-outline-success');
+    btn.classList.add('btn-outline-secondary');
+    badge.classList.add('d-none');
+
+    const comparison = typeof window.compareSmartDnsVersions === 'function'
+        ? window.compareSmartDnsVersions(current, latest)
+        : null;
+
+    if (comparison === 1) {
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-outline-success');
         btn.disabled = false;
         btn.title = `Доступна новая версия: v${latest}\nНажмите для обновления`;
         badge.classList.remove('d-none');
+    } else if (comparison === null) {
+        btn.title = 'Не удалось проверить корректную версию на GitHub';
+    } else if (comparison < 0) {
+        btn.title = `Ветка main содержит более старую версию (v${latest}). Откат не предлагается.`;
     } else {
         btn.title = 'У вас установлена актуальная версия';
     }
