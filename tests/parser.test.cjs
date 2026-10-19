@@ -13,10 +13,10 @@ const config = [
   'nameserver /domain-set:my.route/group.name',
   'domain-set -name malformed -unknown option',
   ''
-].join('\\n');
+].join('\n');
 const html = context.parseConfigToSections(config);
 
-assert.match(html, /value="my\\.route"/, 'dotted domain-set name should survive parsing');
-assert.match(html, /value="group\\.name"/, 'dotted nameserver group should survive parsing');
+assert.match(html, /value="my\.route"/, 'dotted domain-set name should survive parsing');
+assert.match(html, /value="group\.name"/, 'dotted nameserver group should survive parsing');
 assert.match(html, /domain-set -name malformed -unknown option/, 'unsupported domain-set directive should remain in Other');
 console.log('parser round-trip regression checks passed');
