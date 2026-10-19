@@ -110,14 +110,14 @@ chmod 644 "$STAGE_DIR/$CONF_NAME" || fail "не удалось установи�
 
 CHANGED=1
 for name in $FILES; do
-    cp "$STAGE_DIR/$name" "$WEB_DIR/.$name.new.$" ||
+    cp "$STAGE_DIR/$name" "$WEB_DIR/.$name.new.$$" ||
         fail "не удалось подготовить $name"
     mv -f "$WEB_DIR/.$name.new.$$" "$WEB_DIR/$name" ||
         fail "не удалось заменить $name"
 done
 cp "$STAGE_DIR/$CONF_NAME" "$CONF_DIR/.$CONF_NAME.new.$$" ||
     fail "не удалось подготовить конфиг lighttpd"
-mv -f "$CONF_DIR/.$CONF_NAME.new.$" "$CONF_DIR/$CONF_NAME" ||
+mv -f "$CONF_DIR/.$CONF_NAME.new.$$" "$CONF_DIR/$CONF_NAME" ||
     fail "не удалось установить конфиг lighttpd"
 
 echo "[5/5] Проверка конфигурации и перезапуск lighttpd..."
