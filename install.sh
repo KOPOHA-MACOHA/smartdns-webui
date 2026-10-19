@@ -135,6 +135,10 @@ if ! "$LIGHTTPD_INIT" restart; then
     fail "lighttpd не перезапустился; выполнен откат файлов"
 fi
 
+# Remove artifacts from the earlier panel-specific-password implementation.
+# They are no longer referenced; authentication now uses Entware root credentials.
+rm -f "$WEB_DIR/setup-auth.sh" /opt/etc/lighttpd/smartdns-webui.htpasswd
+
 echo "========================================"
 echo "Установка/обновление завершено."
 echo "Резервная копия: $BACKUP_DIR"
