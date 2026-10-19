@@ -243,7 +243,7 @@
                     <option value="h3">DNS over HTTP/3</option>
                 </select>
                 <label class="form-label small" for="dns-address">Адрес сервера / домен</label>
-                <input id="dns-address" class="form-control mb-3" type="text" placeholder="Например, 1.1.1.1 или cloudflare-dns.com">
+                <div class="input-group mb-3"><span id="dns-address-scheme" class="input-group-text d-none">https://</span><input id="dns-address" class="form-control" type="text" placeholder="Например, 1.1.1.1 или cloudflare-dns.com"></div>
                 <div class="row g-3">
                     <div class="col-5">
                         <label class="form-label small" for="dns-port">Порт (необязательно)</label>
@@ -272,7 +272,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=14"></script>
+<script src="parser.js?v=15"></script>
 <script src="validator.js?v=1"></script>
 <script src="version.js?v=1"></script>
 <script src="app.js?v=14"></script>
