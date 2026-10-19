@@ -82,6 +82,13 @@ restart_smartdns() {
 acquire_update_lock() {
     UPDATE_LOCK="/opt/tmp/smartdns-webui-update.lock"
     if mkdir "$UPDATE_LOCK" 2>/dev/null; then
+        # Publish the request owner's PID immediately, closing the window
+        # where a concurrent request could mistake a newly-created lock
+        # for an abandoned one.
+        printf '%s\\n' "$" > "$UPDATE_LOCK/pid" || {
+            rm -rf "$UPDATE_LOCK"
+            return 1
+        }
         return 0
     fi
 
@@ -89,7 +96,36 @@ acquire_update_lock() {
     OLD_PID=$(cat "$UPDATE_LOCK/pid" 2>/dev/null || true)
     if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
         rm -rf "$UPDATE_LOCK"
-        mkdir "$UPDATE_LOCK" 2>/dev/null && return 0
+        if mkdir "$UPDATE_LOCK" 2>/dev/null; then
+            printf '%s\\n' "$" > "$UPDATE_LOCK/pid" || {
+                rm -rf "$UPDATE_LOCK"
+                return 1
+            }
+            return 0
+        fi
+        return 1
+    fi
+
+    # A crash can occur between mkdir and writing the PID. Only reclaim a
+    # PID-less lock after it has aged enough to avoid racing the creator.
+    if [ -z "$OLD_PID" ]; then
+        LOCK_MTIME=$(stat -c '%Y' "$UPDATE_LOCK" 2>/dev/null || true)
+        NOW=$(date +%s 2>/dev/null || true)
+        case "$LOCK_MTIME:$NOW" in
+            *[!0-9:]*|:*) ;;
+            *)
+                if [ "$((NOW - LOCK_MTIME))" -ge 300 ]; then
+                    rm -rf "$UPDATE_LOCK"
+                    if mkdir "$UPDATE_LOCK" 2>/dev/null; then
+                        printf '%s\\n' "$" > "$UPDATE_LOCK/pid" || {
+                            rm -rf "$UPDATE_LOCK"
+                            return 1
+                        }
+                        return 0
+                    fi
+                fi
+                ;;
+        esac
     fi
     return 1
 }
