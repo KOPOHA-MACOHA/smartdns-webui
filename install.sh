@@ -78,7 +78,7 @@ case "$(cat "$STAGE_DIR/version.txt" | tr -d '\r\n')" in
 esac
 
 cat > "$STAGE_DIR/$CONF_NAME" <<'EOF'
-server.modules += ( "mod_cgi", "mod_rewrite", "mod_auth" )
+server.modules += ( "mod_cgi", "mod_rewrite", "mod_auth", "mod_authn_file" )
 
 $SERVER["socket"] == ":3000" {
     server.document-root = "/opt/share/www/smartdns/"
