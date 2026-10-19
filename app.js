@@ -290,9 +290,23 @@ async function globalSave() {
         contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
         
         const error = await validateConfigLogical(contentToSave);
-        if (error) { 
-            alert(error); 
-            return false; 
+        if (error) {
+            alert(error);
+            return false;
+        }
+
+        // Conservative offline checks only; this is not SmartDNS's native parser.
+        if (typeof window.validateSmartDnsConfig === 'function') {
+            const syntax = window.validateSmartDnsConfig(contentToSave);
+            if (syntax.errors.length) {
+                alert('Предварительная проверка конфигурации не пройдена:\n\n' + syntax.errors.join('\n\n') +
+                    '\n\nЭто статическая проверка WebUI, а не проверка самим SmartDNS.');
+                return false;
+            }
+            if (syntax.warnings.length && !confirm('Предварительная проверка обнаружила предупреждения:\n\n' +
+                syntax.warnings.join('\n\n') + '\n\nСохранить конфигурацию всё равно?')) {
+                return false;
+            }
         }
         
         const saved = await apiCall('save_config', null, contentToSave);
