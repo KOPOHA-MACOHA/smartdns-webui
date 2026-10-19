@@ -187,6 +187,24 @@ window.addEventListener('popstate', (e) => {
 
 // === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
 async function validateConfigLogical(text) {
+    // Имена групп SmartDNS передаются одним аргументом -group и не могут
+    // содержать пробелы или произвольные символы, которые ломают директиву.
+    const groupNames = Array.from(document.querySelectorAll('.group-name-input'))
+        .map(input => input.value.trim())
+        .filter(Boolean);
+    const invalidGroupName = groupNames.find(name => !/^[A-Za-z0-9_.-]+$/.test(name));
+    if (invalidGroupName) {
+        return `Некорректное имя DNS-группы: "${invalidGroupName}".\nИспользуйте только латинские буквы, цифры, точку, дефис и подчёркивание. Пробелы не допускаются.`;
+    }
+
+    const seenGroupNames = new Set();
+    for (const name of groupNames) {
+        if (seenGroupNames.has(name)) {
+            return `DNS-группа "${name}" указана несколько раз. Имена групп должны быть уникальными.`;
+        }
+        seenGroupNames.add(name);
+    }
+
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     
