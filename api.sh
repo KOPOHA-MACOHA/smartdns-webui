@@ -5,6 +5,25 @@ CURRENT_VERSION=$(cat "$BASE_DIR/version.txt" 2>/dev/null | tr -d '\r\n')
 [ -z "$CURRENT_VERSION" ] && CURRENT_VERSION="0.0.0"
 REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/main"
 
+# Accept only numeric MAJOR.MINOR.PATCH versions.
+version_is_valid() {
+    printf '%s\n' "$1" | awk -F. 'NF == 3 && $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ { exit 0 } { exit 1 }'
+}
+
+# Return success only when latest is strictly newer than current.
+version_is_newer() {
+    version_is_valid "$1" && version_is_valid "$2" || return 1
+    awk -v current="$1" -v latest="$2" 'BEGIN {
+        split(current, c, ".")
+        split(latest, l, ".")
+        for (i = 1; i <= 3; i++) {
+            if ((l[i] + 0) > (c[i] + 0)) exit 0
+            if ((l[i] + 0) < (c[i] + 0)) exit 1
+        }
+        exit 1
+    }'
+}
+
 TEST_MODE="$HTTP_X_TEST_MODE"
 
 if [ "$TEST_MODE" = "1" ]; then
@@ -188,9 +207,9 @@ handle_api() {
             cat "$LOG_FILE" 2>/dev/null
             ;;
         "get_update")
-            # Проверяем версию без кэша GitHub (добавляем ?t=время)
+            # Проверяем версию без кэша GitHub и игнорируем некорректный ответ.
             LATEST=$(curl -fsSL "${REPO_URL}/version.txt?t=$(date +%s)" 2>/dev/null | tr -d '\r\n')
-            [ -z "$LATEST" ] && LATEST="$CURRENT_VERSION"
+            version_is_valid "$LATEST" || LATEST="$CURRENT_VERSION"
             echo "${CURRENT_VERSION}|${LATEST}"
             ;;
         "get_update_status")
@@ -204,6 +223,10 @@ handle_api() {
         "do_update")
             if [ "$TEST_MODE" = "1" ]; then
                 echo "ERROR: update disabled in test mode"
+            elif ! version_is_valid "$CURRENT_VERSION"; then
+                echo "ERROR: installed version is invalid; refusing update"
+            elif ! LATEST=$(curl -fsSL "${REPO_URL}/version.txt?t=$(date +%s)" 2>/dev/null | tr -d '\r\n') || ! version_is_valid "$LATEST" || ! version_is_newer "$CURRENT_VERSION" "$LATEST"; then
+                echo "ERROR: no newer valid version available; refusing update"
             elif ! mkdir -p /opt/tmp /opt/var/log 2>/dev/null; then
                 echo "ERROR: cannot create update directories"
             elif ! acquire_update_lock; then
