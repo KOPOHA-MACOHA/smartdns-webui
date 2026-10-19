@@ -78,12 +78,21 @@ case "$(cat "$STAGE_DIR/version.txt" | tr -d '\r\n')" in
 esac
 
 cat > "$STAGE_DIR/$CONF_NAME" <<'EOF'
-server.modules += ( "mod_cgi", "mod_rewrite" )
+server.modules += ( "mod_cgi", "mod_rewrite", "mod_auth" )
 
 $SERVER["socket"] == ":3000" {
     server.document-root = "/opt/share/www/smartdns/"
     index-file.names = ( "index.cgi" )
     cgi.assign = ( ".cgi" => "/bin/sh" )
+
+    # Fail closed: until setup-auth.sh creates the credentials file, access is denied.
+    auth.backend = "htpasswd"
+    auth.backend.htpasswd.userfile = "/opt/etc/lighttpd/smartdns-webui.htpasswd"
+    auth.require = ( "" => (
+        "method" => "basic",
+        "realm" => "SmartDNS WebUI",
+        "require" => "user=root"
+    ) )
 
     url.rewrite-once = (
         "^/(settings|lists|logs)$" => "/index.cgi"
