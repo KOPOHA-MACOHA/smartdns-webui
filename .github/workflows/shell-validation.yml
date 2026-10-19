@@ -29,6 +29,7 @@ jobs:
           node --check app.js
           node --check parser.js
           node --check validator.js
+          node --check version.js
 
       - name: Run JavaScript regression tests when present
         run: |
