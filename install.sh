@@ -77,7 +77,7 @@ mkdir -p "$WEB_DIR" "$CONF_DIR" "$BACKUP_ROOT" "$STAGE_DIR" "$BACKUP_DIR" ||
 
 echo "[1/5] Скачивание файлов во временный каталог..."
 for name in $FILES; do
-    if ! curl -fsSL --connect-timeout 15 --max-time 120 "$REPO_URL/$name" -o "$STAGE_DIR/$name"; then
+    if ! curl -fsSL --connect-timeout 15 --max-time 120 "$REPO_URL/$name?cb=$T" -o "$STAGE_DIR/$name"; then
         fail "не удалось скачать $name; установленная версия не изменена"
     fi
     [ -s "$STAGE_DIR/$name" ] || fail "скачанный файл пуст: $name"
