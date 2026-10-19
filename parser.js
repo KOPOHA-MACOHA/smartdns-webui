@@ -87,24 +87,43 @@ const UI = {
         </div>`,
 
     routeCard: (name, group, files) => `
-        <div class="route-item border border-secondary p-2 mb-2 rounded bg-dark position-relative shadow-sm">
-            <div class="d-flex mb-2 align-items-center">
-                <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
-                <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary route-name w-50 me-2 fw-bold" placeholder="Имя сета" value="${UI.escape(name)}" oninput="markConfigDirty()">
-                <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary route-group w-50 me-2" placeholder="В группу" value="${UI.escape(group)}" oninput="markConfigDirty()">
-                <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
+        <div class="route-item border p-2 mb-2 rounded position-relative shadow-sm">
+            <div class="d-flex gap-2 align-items-center mb-2">
+                <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
+                <div class="editable-name route-editable-name flex-grow-1">
+                    <span class="route-name-display fw-semibold">${UI.escape(name || 'Новый маршрут')}</span>
+                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty()" onkeydown="if(event.key==='Enter'){event.preventDefault();toggleInlineEdit(this.parentElement.querySelector('button'))}">
+                    <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
             </div>
-            <textarea class="form-control code-font bg-secondary text-light border-secondary p-2 route-files" rows="3" placeholder="/opt/etc/smartdns/domains/list.list\n# /opt/... (комментарий)" oninput="markConfigDirty()">${UI.escape(files)}</textarea>
+            <div class="route-files-list">
+                <textarea class="form-control code-font bg-secondary text-light border-secondary p-2 route-files" rows="2" placeholder="Путь к файлу списка, по одному на строку" oninput="markConfigDirty()">${UI.escape(files)}</textarea>
+            </div>
+            <div class="d-flex justify-content-end mt-2">
+                <label class="small text-muted me-2 align-self-center">DNS-группа</label>
+                <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty()"></select>
+            </div>
         </div>`,
 
     groupCard: (name, content) => `
-        <div class="group-item border border-secondary p-2 mb-2 rounded bg-dark position-relative shadow-sm">
-            <div class="d-flex mb-2 align-items-center">
-                <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
-                <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary group-name-input w-50 me-2 fw-bold" placeholder="Имя группы" value="${UI.escape(name)}" oninput="markConfigDirty()">
-                <button class="btn btn-sm btn-outline-danger ms-auto" onclick="this.closest('.group-item').remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
+        <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm">
+            <div class="d-flex gap-2 align-items-center mb-2">
+                <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
+                <div class="editable-name group-editable-name flex-grow-1">
+                    <span class="group-name-display fw-semibold">${UI.escape(name || 'Новая DNS-группа')}</span>
+                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onkeydown="if(event.key==='Enter'){event.preventDefault();toggleInlineEdit(this.parentElement.querySelector('button'))}">
+                    <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
-            <textarea class="form-control code-font bg-secondary text-light border-secondary p-2 group-content-input" rows="3" placeholder="https://dns.geohide.ru/dns-query" oninput="markConfigDirty()">${UI.escape(content)}</textarea>
+            <div class="group-dns-list">
+                <textarea class="form-control code-font bg-secondary text-light border-secondary p-2 group-content-input" rows="2" placeholder="DNS-серверы группы" oninput="markConfigDirty()">${UI.escape(content)}</textarea>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="settings-section-hint">DNS-серверы этой группы</span>
+                <button class="btn btn-sm btn-outline-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
+            </div>
         </div>`,
 
     coreCard: (data, rawLines) => `
@@ -161,6 +180,96 @@ window.addNewAddressUI = () => {
 window.addNewRouteUI = () => {
     const cont = document.getElementById('dynamic-routes-container');
     if (cont) { document.getElementById('no-route-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.routeCard('', '', '')); markConfigDirty(); }
+};
+
+
+window.toggleInlineEdit = function(button) {
+    const wrapper = button.closest('.editable-name');
+    if (!wrapper) return;
+    const input = wrapper.querySelector('input');
+    const display = wrapper.querySelector('span');
+    const editing = input.classList.contains('d-none');
+    input.classList.toggle('d-none', !editing);
+    display.classList.toggle('d-none', editing);
+    button.innerHTML = editing ? '<i class="bi bi-check2"></i>' : '<i class="bi bi-pencil"></i>';
+    button.title = editing ? 'Готово' : 'Переименовать';
+    if (editing) { input.focus(); input.select(); }
+    else { input.blur(); markConfigDirty(); }
+};
+
+window.updateInlineName = function(input) {
+    const display = input.parentElement.querySelector('span');
+    if (display) display.textContent = input.value.trim() || (input.classList.contains('group-name-input') ? 'Новая DNS-группа' : 'Новый маршрут');
+};
+
+window.refreshRouteGroupOptions = function() {
+    const names = Array.from(document.querySelectorAll('.group-name-input'))
+        .map(input => input.value.trim()).filter(Boolean);
+    document.querySelectorAll('.route-group').forEach(select => {
+        const selected = select.value || select.dataset.currentGroup || '';
+        const options = ['<option value="">Выберите DNS-группу…</option>'];
+        names.forEach(name => options.push('<option value="' + UI.escape(name) + '">' + UI.escape(name) + '</option>'));
+        if (selected && !names.includes(selected)) options.push('<option value="' + UI.escape(selected) + '">' + UI.escape(selected) + ' (не найдена)</option>');
+        select.innerHTML = options.join('');
+        select.value = selected;
+        select.dataset.currentGroup = selected;
+    });
+};
+
+window.renameDnsGroup = function(input) {
+    const oldName = input.dataset.prevName || '';
+    const newName = input.value.trim();
+    updateInlineName(input);
+    if (oldName && newName && oldName !== newName) {
+        document.querySelectorAll('.route-group').forEach(select => {
+            if (select.value === oldName || select.dataset.currentGroup === oldName) {
+                select.value = newName;
+                select.dataset.currentGroup = newName;
+            }
+        });
+    }
+    input.dataset.prevName = newName;
+    refreshRouteGroupOptions();
+};
+
+window.openDnsModal = function(groupItem) {
+    const modal = document.getElementById('dns-server-modal');
+    if (!modal || !window.bootstrap) return;
+    window.dnsModalGroupTarget = groupItem;
+    document.getElementById('dns-type').value = 'udp4';
+    document.getElementById('dns-address').value = '';
+    document.getElementById('dns-path').value = '/dns-query';
+    document.getElementById('dns-port').value = '';
+    updateDnsModalFields();
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+};
+
+window.updateDnsModalFields = function() {
+    const type = document.getElementById('dns-type')?.value || 'udp4';
+    const pathRow = document.getElementById('dns-path-row');
+    if (pathRow) pathRow.classList.toggle('d-none', !['doh','h3'].includes(type));
+    const port = document.getElementById('dns-port');
+    if (port) port.placeholder = ({udp4:'53',udp6:'53',tcp:'53',dot:'853',doq:'853',doh:'443',h3:'443'})[type] || 'Порт';
+};
+
+window.addDnsServerFromModal = function() {
+    const type = document.getElementById('dns-type').value;
+    const address = document.getElementById('dns-address').value.trim();
+    const port = document.getElementById('dns-port').value.trim();
+    const path = document.getElementById('dns-path').value.trim() || '/dns-query';
+    if (!address) { alert('Укажите адрес DNS-сервера.'); return; }
+    let line;
+    if (type === 'dot') line = 'server-tls ' + address + (port ? ':' + port : '');
+    else if (type === 'doq') line = 'server-quic ' + address + (port ? ':' + port : '');
+    else if (type === 'doh') line = 'server-https https://' + address + (port ? ':' + port : '') + path;
+    else if (type === 'h3') line = 'server-h3 h3://' + address + (port ? ':' + port : '') + path;
+    else if (type === 'tcp') line = 'server-tcp ' + address + (port ? ':' + port : '');
+    else line = address + (port && port !== '53' ? ':' + port : '');
+    const textarea = window.dnsModalGroupTarget?.querySelector('.group-content-input');
+    if (!textarea) return;
+    textarea.value = textarea.value.trim() ? textarea.value.trim() + '\n' + line : line;
+    textarea.dispatchEvent(new Event('input', {bubbles:true}));
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('dns-server-modal')).hide();
 };
 
 // === ОСНОВНОЙ ПАРСЕР ===
