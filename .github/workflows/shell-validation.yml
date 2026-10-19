@@ -30,6 +30,8 @@ jobs:
               sh -n "$file"
             done
 
-      - name: Run ShellCheck on shell entry points
+      - name: Run ShellCheck on shell scripts and CGI entry points
         run: |
-          shellcheck --severity=error install.sh api.sh index.cgi setup-auth.sh
+          find . -type f \( -name '*.sh' -o -name '*.cgi' \) \
+            -not -path './.git/*' -print0 |
+            xargs -0 shellcheck --severity=error
