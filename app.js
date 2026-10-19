@@ -187,6 +187,22 @@ window.addEventListener('popstate', (e) => {
 
 // === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
 async function validateConfigLogical(text) {
+    // Group names are used as a single SmartDNS -group argument.
+    const groupNames = Array.from(document.querySelectorAll('.group-name-input'))
+        .map(input => input.value.trim())
+        .filter(Boolean);
+    const invalidGroupName = groupNames.find(name => !/^[A-Za-z0-9_.-]+$/.test(name));
+    if (invalidGroupName) {
+        return `Некорректное имя DNS-группы: "${invalidGroupName}".\nИспользуйте только латинские буквы, цифры, точку, дефис и подчёркивание. Пробелы не допускаются.`;
+    }
+    const seenGroupNames = new Set();
+    for (const name of groupNames) {
+        if (seenGroupNames.has(name)) {
+            return `DNS-группа "${name}" указана несколько раз. Имена групп должны быть уникальными.`;
+        }
+        seenGroupNames.add(name);
+    }
+
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     
@@ -263,12 +279,20 @@ async function globalSave() {
             return false; 
         }
         
-        await apiCall('save_config', null, contentToSave);
+        const saved = await apiCall('save_config', null, contentToSave);
+        if (!saved) {
+            alert('Не удалось сохранить конфигурацию. Исходное состояние не изменено.');
+            return false;
+        }
         originalConfigContent = contentToSave; 
         
     } else if (activeTab === 'lists' && activeList) {
         contentToSave = document.getElementById('list-content').value;
-        await apiCall('save_list', activeList, contentToSave);
+        const saved = await apiCall('save_list', activeList, contentToSave);
+        if (!saved) {
+            alert('Не удалось сохранить список. Изменения остались в редакторе.');
+            return false;
+        }
         originalListContent = contentToSave; 
     }
     
@@ -300,21 +324,34 @@ async function restartService() {
         const saved = await globalSave();
         if (!saved) return;
     }
-    await apiCall('restart_service');
-    alert('Конфигурация применена, сервис перезапущен!');
+    const restarted = await apiCall('restart_service');
+    if (!restarted) {
+        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.');
+        return;
+    }
+    alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
 }
 
 async function loadLists() {
     const listsRaw = await apiCall('get_lists');
     const lists = listsRaw.split('\n').filter(l => l.trim() !== '');
-    let html = '';
-    
-    lists.forEach(l => {
-        const activeClass = l === activeList ? 'active' : 'bg-dark text-light border-secondary';
-        html += `<a href="javascript:void(0);" onclick="selectList('${l}')" class="list-group-item list-group-item-action ${activeClass}"><i class="bi bi-file-earmark-text me-2"></i>${l}</a>`;
+    const container = document.getElementById('lists-container');
+    container.replaceChildren();
+
+    lists.forEach(name => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action ' +
+            (name === activeList ? 'active' : 'bg-dark text-light border-secondary');
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-file-earmark-text me-2';
+        item.append(icon, document.createTextNode(name));
+        item.addEventListener('click', event => {
+            event.preventDefault();
+            selectList(name);
+        });
+        container.appendChild(item);
     });
-    
-    document.getElementById('lists-container').innerHTML = html;
 
     if (!activeList && lists.length > 0) {
         await selectList(lists[0]);
@@ -358,7 +395,11 @@ async function createList() {
     let name = input.value.replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return;
     name += '.list';
-    await apiCall('save_list', name, '');
+    const saved = await apiCall('save_list', name, '');
+    if (!saved) {
+        alert('Не удалось создать список. Проверьте права доступа и журнал.');
+        return;
+    }
     input.value = '';
     
     await loadLists(); 
@@ -367,7 +408,11 @@ async function createList() {
 
 async function deleteList() {
     if (!activeList || !confirm('Точно удалить ' + activeList + '?')) return;
-    await apiCall('delete_list', activeList);
+    const deleted = await apiCall('delete_list', activeList);
+    if (!deleted) {
+        alert('Не удалось удалить список. Проверьте права доступа и журнал.');
+        return;
+    }
     activeList = '';
     const ta = document.getElementById('list-content');
     ta.value = ''; ta.disabled = true;
