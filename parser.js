@@ -60,15 +60,17 @@ const UI = {
     
     dnsServerRow: (value) => {
         const raw = (value || '').trim();
-        const displayValue = raw.replace(/^#+\s*/, '')
+        const isComment = raw.startsWith('#');
+        const cleanLine = raw.replace(/^#+\s*/, '')
             .replace(/\s+-bootstrap-dns\b/g, '')
             .replace(/\s+-exclude-default-group\b/g, '')
             .replace(/\s+-group\s+[^\s]+/g, '')
             .trim();
+        const displayValue = isComment ? '# ' + cleanLine : cleanLine;
         const parts = window.parseDnsModalValue ? window.parseDnsModalValue(displayValue) : { type: 'udp4', address: displayValue, port: '', path: '/dns-query', options: '' };
         const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
         const endpoint = [parts.address || '', parts.port ? ':' + parts.port : '', ['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : ''].join('');
-        const protocol = /^#/.test(raw) ? 'Отключён' : (labels[parts.type] || 'DNS');
+        const protocol = isComment ? 'Отключён' : (labels[parts.type] || 'DNS');
         return `<div class="dns-server-row d-flex align-items-center gap-3">
             <span class="dns-protocol">${UI.escape(protocol)}</span>
             <span class="dns-endpoint flex-grow-1 text-truncate" title="${UI.escape(endpoint)}">${UI.escape(endpoint)}</span>
@@ -334,6 +336,7 @@ window.openDnsModal = function(target, row = null) {
     if (!modal || !window.bootstrap) return;
     window.dnsModalTarget = target;
     window.dnsModalEditRow = row;
+    window.dnsModalWasCommented = !!(row && (row.querySelector('.dns-value')?.value || '').trim().startsWith('#'));
     const title = document.getElementById('dns-server-modal-title');
     const submit = document.getElementById('dns-modal-submit');
     if (row) {
@@ -382,6 +385,7 @@ window.addDnsServerFromModal = function() {
     else if (type === 'tcp') line = 'server-tcp ' + host + (port ? ':' + port : '');
     else line = host + (port && port !== '53' ? ':' + port : '');
     if (options) line += ' ' + options;
+    if (window.dnsModalEditRow && window.dnsModalWasCommented) line = '# ' + line;
     const target = window.dnsModalTarget;
     if (!target) return;
     const list = target.classList.contains('dns-server-list') ? target : target.querySelector('.group-dns-list');
@@ -392,6 +396,7 @@ window.addDnsServerFromModal = function() {
     if (editRow && editRow.isConnected) editRow.outerHTML = html;
     else list.insertAdjacentHTML('beforeend', html);
     window.dnsModalEditRow = null;
+    window.dnsModalWasCommented = false;
     markConfigDirty();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('dns-server-modal')).hide();
 };
