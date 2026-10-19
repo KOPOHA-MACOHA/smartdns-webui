@@ -73,6 +73,7 @@ echo "[2/5] Проверка скачанных файлов..."
 sed -i 's/\r$//' "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh"
 sh -n "$STAGE_DIR/index.cgi" || fail "синтаксическая ошибка в index.cgi"
 sh -n "$STAGE_DIR/api.sh" || fail "синтаксическая ошибка в api.sh"
+sh -n "$STAGE_DIR/setup-auth.sh" || fail "синтаксическая ошибка в setup-auth.sh"
 case "$(cat "$STAGE_DIR/version.txt" | tr -d '\r\n')" in
     ""|*[!0-9.]* ) fail "некорректный version.txt" ;;
 esac
