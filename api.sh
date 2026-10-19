@@ -175,10 +175,10 @@ handle_api() {
             else
                 UPDATE_STATUS="/opt/tmp/smartdns-webui-update.status"
                 UPDATE_LOCK="/opt/tmp/smartdns-webui-update.lock"
-                UPDATE_TMP="/opt/tmp/smartdns-webui-update-$.sh"
+                UPDATE_TMP="/opt/tmp/smartdns-webui-update-installer.tmp"
                 UPDATE_LOG="/opt/var/log/smartdns-webui-update.log"
-                printf 'RUNNING\n' > "${UPDATE_STATUS}.tmp.$" &&
-                    mv -f "${UPDATE_STATUS}.tmp.$" "$UPDATE_STATUS" || {
+                printf 'RUNNING\n' > "${UPDATE_STATUS}.tmp" &&
+                    mv -f "${UPDATE_STATUS}.tmp" "$UPDATE_STATUS" || {
                         rm -rf "$UPDATE_LOCK"
                         echo "ERROR: cannot write update status"
                         return 1
@@ -188,8 +188,8 @@ handle_api() {
                     finish_update() {
                         rc=$?
                         if [ "$rc" -ne 0 ]; then
-                            printf 'ERROR\n' > "${UPDATE_STATUS}.tmp.$"
-                            mv -f "${UPDATE_STATUS}.tmp.$" "$UPDATE_STATUS"
+                            printf 'ERROR\n' > "${UPDATE_STATUS}.tmp"
+                            mv -f "${UPDATE_STATUS}.tmp" "$UPDATE_STATUS"
                         fi
                         rm -rf "$UPDATE_LOCK"
                     }
@@ -207,8 +207,8 @@ handle_api() {
                     fi
                     if sh "$UPDATE_TMP" >> "$UPDATE_LOG" 2>&1; then
                         echo "[$(date)] Update completed successfully" >> "$UPDATE_LOG"
-                        printf 'SUCCESS\n' > "${UPDATE_STATUS}.tmp.$"
-                        mv -f "${UPDATE_STATUS}.tmp.$" "$UPDATE_STATUS"
+                        printf 'SUCCESS\n' > "${UPDATE_STATUS}.tmp"
+                        mv -f "${UPDATE_STATUS}.tmp" "$UPDATE_STATUS"
                     else
                         echo "[$(date)] ERROR: update failed" >> "$UPDATE_LOG"
                         rm -f "$UPDATE_TMP"
