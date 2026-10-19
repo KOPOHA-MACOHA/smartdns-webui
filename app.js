@@ -124,6 +124,7 @@ function switchSettingsMode(mode) {
     } else {
         const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
         document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
+        if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
         
         uiView.style.display = 'block'; 
         rawView.style.display = 'none';
@@ -333,6 +334,7 @@ async function globalSave() {
 async function loadConfig() {
     const content = await apiCall('get_config');
     document.getElementById('config-sections').innerHTML = parseConfigToSections(content);
+    if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
     
     const normalized = gatherSectionsText();
     originalConfigContent = currentSettingsMode === 'ui' ? normalized : content;
