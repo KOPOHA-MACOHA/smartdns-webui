@@ -57,8 +57,13 @@ esac
 
 # Lighttpd must be able to read the hash file, but it must not be world-readable.
 # Use the configured lighttpd group when present; otherwise keep root:root.
-LIGHTTPD_GROUP=$(grep -h '^[[:space:]]*server\.groupname[[:space:]]*=' "$LIGHTTPD_CONF" "$AUTH_DIR"/conf.d/*.conf 2>/dev/null |
-    sed -n 's/.*=[[:space:]]*"\([^"]*\)".*/\1/p' | tail -n 1)
+LIGHTTPD_GROUP=$(grep -h '^[[:space:]]*server\\.groupname[[:space:]]*=' "$LIGHTTPD_CONF" "$AUTH_DIR"/conf.d/*.conf 2>/dev/null |
+    sed -n 's/.*=[[:space:]]*"\\([^"]*\\)".*/\\1/p' | tail -n 1)
+LIGHTTPD_USER=$(grep -h '^[[:space:]]*server\\.username[[:space:]]*=' "$LIGHTTPD_CONF" "$AUTH_DIR"/conf.d/*.conf 2>/dev/null |
+    sed -n 's/.*=[[:space:]]*"\\([^"]*\\)".*/\\1/p' | tail -n 1)
+if [ -z "$LIGHTTPD_GROUP" ] && [ -n "$LIGHTTPD_USER" ]; then
+    LIGHTTPD_GROUP=$(id -gn "$LIGHTTPD_USER" 2>/dev/null || true)
+fi
 [ -n "$LIGHTTPD_GROUP" ] || LIGHTTPD_GROUP="root"
 
 printf 'root:%s\n' "$HASH" > "$TMP_FILE" || fail "не удалось записать временный файл"
