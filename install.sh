@@ -6,7 +6,7 @@ CONF_DIR="/opt/etc/lighttpd/conf.d"
 LIGHTTPD_INIT="/opt/etc/init.d/S80lighttpd"
 LIGHTTPD_CONF="/opt/etc/lighttpd/lighttpd.conf"
 REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/main"
-FILES="index.cgi api.sh template.html parser.js app.js version.txt"
+FILES="index.cgi api.sh template.html parser.js app.js version.txt setup-auth.sh"
 T="$(date +%Y%m%d-%H%M%S)-$$"
 BACKUP_ROOT="/opt/var/backups/smartdns-webui"
 BACKUP_DIR="$BACKUP_ROOT/$T"
@@ -73,17 +73,27 @@ echo "[2/5] Проверка скачанных файлов..."
 sed -i 's/\r$//' "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh"
 sh -n "$STAGE_DIR/index.cgi" || fail "синтаксическая ошибка в index.cgi"
 sh -n "$STAGE_DIR/api.sh" || fail "синтаксическая ошибка в api.sh"
+sh -n "$STAGE_DIR/setup-auth.sh" || fail "синтаксическая ошибка в setup-auth.sh"
 case "$(cat "$STAGE_DIR/version.txt" | tr -d '\r\n')" in
     ""|*[!0-9.]* ) fail "некорректный version.txt" ;;
 esac
 
 cat > "$STAGE_DIR/$CONF_NAME" <<'EOF'
-server.modules += ( "mod_cgi", "mod_rewrite" )
+server.modules += ( "mod_cgi", "mod_rewrite", "mod_auth", "mod_authn_file" )
 
 $SERVER["socket"] == ":3000" {
     server.document-root = "/opt/share/www/smartdns/"
     index-file.names = ( "index.cgi" )
     cgi.assign = ( ".cgi" => "/bin/sh" )
+
+    # Fail closed: no credentials file means requests cannot authenticate.
+    auth.backend = "htpasswd"
+    auth.backend.htpasswd.userfile = "/opt/etc/lighttpd/smartdns-webui.htpasswd"
+    auth.require = ( "" => (
+        "method" => "basic",
+        "realm" => "SmartDNS WebUI",
+        "require" => "user=root"
+    ) )
 
     url.rewrite-once = (
         "^/(settings|lists|logs)$" => "/index.cgi"
@@ -104,7 +114,7 @@ echo "[4/5] Установка проверенных файлов..."
 for name in $FILES; do
     chmod 644 "$STAGE_DIR/$name" || fail "chmod не удался для $name"
 done
-chmod 755 "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh" ||
+chmod 755 "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh" "$STAGE_DIR/setup-auth.sh" ||
     fail "не удалось установить права CGI-файлов"
 chmod 644 "$STAGE_DIR/$CONF_NAME" || fail "не удалось установить права конфига"
 
@@ -141,4 +151,5 @@ echo "========================================"
 echo "Установка/обновление завершено."
 echo "Резервная копия: $BACKUP_DIR"
 echo "Интерфейс: http://<IP_РОУТЕРА>:3000"
+echo "Если авторизация ещё не настроена, подключитесь по SSH и выполните: sh $WEB_DIR/setup-auth.sh"
 echo "========================================"
