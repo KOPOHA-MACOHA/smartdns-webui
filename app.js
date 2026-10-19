@@ -464,8 +464,14 @@ async function performUpdate() {
     btn.disabled = true;
     document.getElementById('update-badge')?.classList.add('d-none');
     
-    await apiCall('do_update');
-    
+    const queued = await apiCall('do_update');
+    if (!queued) {
+        alert('Не удалось запустить обновление. Проверьте доступ к роутеру и повторите попытку.');
+        btn.innerHTML = '<i class="bi bi-github me-1"></i> v<span id="current-version-text"></span>';
+        btn.disabled = false;
+        return;
+    }
+
     setTimeout(() => {
         window.location.reload(true);
     }, 8000);
