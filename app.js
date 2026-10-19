@@ -3,6 +3,7 @@ let activeList = '';
 let currentSettingsMode = 'ui'; 
 let isTestMode = false;
 
+window.rawEditor = null;
 let rawEditor = null; // Глобальная переменная для редактора с подсветкой
 
 function resetToHome() {
@@ -108,10 +109,11 @@ function switchSettingsMode(mode) {
             });
             rawEditor = CodeMirror.fromTextArea(document.getElementById('raw-config-text'), {
                 mode: "smartdns",
-                theme: "dracula",
+                theme: "default",
                 lineNumbers: true,
                 lineWrapping: true
             });
+            window.rawEditor = rawEditor;
             rawEditor.on('change', () => {
                 document.getElementById('raw-config-text').value = rawEditor.getValue();
                 markConfigDirty();
@@ -124,6 +126,8 @@ function switchSettingsMode(mode) {
     } else {
         const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
         document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
+        if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
+        if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
         
         uiView.style.display = 'block'; 
         rawView.style.display = 'none';
@@ -189,6 +193,38 @@ window.addEventListener('popstate', (e) => {
 async function validateConfigLogical(text) {
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
+    let groupNames;
+    if (currentSettingsMode === 'ui') {
+        groupNames = Array.from(document.querySelectorAll('.group-name-input'))
+            .map(input => input.value.trim())
+            .filter(Boolean);
+    } else {
+        // Raw mode must validate names from the text being saved, not stale UI inputs.
+        const rawGroupNames = [];
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const cmd = trimmed.split(/\s+/)[0];
+            if (!validServers.includes(cmd)) continue;
+            const regex = /(?:\s|^)-group\s+([^\s]+)/g;
+            let match;
+            while ((match = regex.exec(trimmed)) !== null) rawGroupNames.push(match[1]);
+        }
+        groupNames = Array.from(new Set(rawGroupNames));
+    }
+    const invalidGroupName = groupNames.find(name => !/^[A-Za-z0-9_.-]+$/.test(name));
+    if (invalidGroupName) {
+        return `Некорректное имя DNS-группы: "${invalidGroupName}".\nИспользуйте только латинские буквы, цифры, точку, дефис и подчёркивание. Пробелы не допускаются.`;
+    }
+    if (currentSettingsMode === 'ui') {
+        const seenGroupNames = new Set();
+        for (const name of groupNames) {
+            if (seenGroupNames.has(name)) {
+                return `DNS-группа "${name}" указана несколько раз. Имена групп должны быть уникальными.`;
+            }
+            seenGroupNames.add(name);
+        }
+    }
     
     let definedGroups = ['fallback', '#', '-']; 
     let usedLists = [];
@@ -258,17 +294,39 @@ async function globalSave() {
         contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
         
         const error = await validateConfigLogical(contentToSave);
-        if (error) { 
-            alert(error); 
-            return false; 
+        if (error) {
+            alert(error);
+            return false;
+        }
+
+        // Conservative offline checks only; this is not SmartDNS's native parser.
+        if (typeof window.validateSmartDnsConfig === 'function') {
+            const syntax = window.validateSmartDnsConfig(contentToSave);
+            if (syntax.errors.length) {
+                alert('Предварительная проверка конфигурации не пройдена:\n\n' + syntax.errors.join('\n\n') +
+                    '\n\nЭто статическая проверка WebUI, а не проверка самим SmartDNS.');
+                return false;
+            }
+            if (syntax.warnings.length && !confirm('Предварительная проверка обнаружила предупреждения:\n\n' +
+                syntax.warnings.join('\n\n') + '\n\nСохранить конфигурацию всё равно?')) {
+                return false;
+            }
         }
         
-        await apiCall('save_config', null, contentToSave);
+        const saved = await apiCall('save_config', null, contentToSave);
+        if (!saved) {
+            alert('Не удалось сохранить конфигурацию. Исходное состояние не изменено.');
+            return false;
+        }
         originalConfigContent = contentToSave; 
         
     } else if (activeTab === 'lists' && activeList) {
         contentToSave = document.getElementById('list-content').value;
-        await apiCall('save_list', activeList, contentToSave);
+        const saved = await apiCall('save_list', activeList, contentToSave);
+        if (!saved) {
+            alert('Не удалось сохранить список. Изменения остались в редакторе.');
+            return false;
+        }
         originalListContent = contentToSave; 
     }
     
@@ -279,6 +337,8 @@ async function globalSave() {
 async function loadConfig() {
     const content = await apiCall('get_config');
     document.getElementById('config-sections').innerHTML = parseConfigToSections(content);
+    if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
+    if (typeof refreshRouteFileOptions === 'function') await refreshRouteFileOptions();
     
     const normalized = gatherSectionsText();
     originalConfigContent = currentSettingsMode === 'ui' ? normalized : content;
@@ -300,21 +360,34 @@ async function restartService() {
         const saved = await globalSave();
         if (!saved) return;
     }
-    await apiCall('restart_service');
-    alert('Конфигурация применена, сервис перезапущен!');
+    const restarted = await apiCall('restart_service');
+    if (!restarted) {
+        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.');
+        return;
+    }
+    alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
 }
 
 async function loadLists() {
     const listsRaw = await apiCall('get_lists');
     const lists = listsRaw.split('\n').filter(l => l.trim() !== '');
-    let html = '';
-    
-    lists.forEach(l => {
-        const activeClass = l === activeList ? 'active' : 'bg-dark text-light border-secondary';
-        html += `<a href="javascript:void(0);" onclick="selectList('${l}')" class="list-group-item list-group-item-action ${activeClass}"><i class="bi bi-file-earmark-text me-2"></i>${l}</a>`;
+    const container = document.getElementById('lists-container');
+    container.replaceChildren();
+
+    lists.forEach(name => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action ' +
+            (name === activeList ? 'active' : 'bg-dark text-light border-secondary');
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-file-earmark-text me-2';
+        item.append(icon, document.createTextNode(name));
+        item.addEventListener('click', event => {
+            event.preventDefault();
+            selectList(name);
+        });
+        container.appendChild(item);
     });
-    
-    document.getElementById('lists-container').innerHTML = html;
 
     if (!activeList && lists.length > 0) {
         await selectList(lists[0]);
@@ -358,7 +431,11 @@ async function createList() {
     let name = input.value.replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return;
     name += '.list';
-    await apiCall('save_list', name, '');
+    const saved = await apiCall('save_list', name, '');
+    if (!saved) {
+        alert('Не удалось создать список. Проверьте права доступа и журнал.');
+        return;
+    }
     input.value = '';
     
     await loadLists(); 
@@ -367,7 +444,11 @@ async function createList() {
 
 async function deleteList() {
     if (!activeList || !confirm('Точно удалить ' + activeList + '?')) return;
-    await apiCall('delete_list', activeList);
+    const deleted = await apiCall('delete_list', activeList);
+    if (!deleted) {
+        alert('Не удалось удалить список. Проверьте права доступа и журнал.');
+        return;
+    }
     activeList = '';
     const ta = document.getElementById('list-content');
     ta.value = ''; ta.disabled = true;
@@ -441,14 +522,26 @@ async function checkUpdate() {
     }
     
     const [current, latest] = res.trim().split('|');
-    verText.innerText = current; 
-    
-    if (latest && latest !== current && !latest.includes('<')) {
+    verText.innerText = current;
+    btn.disabled = true;
+    btn.classList.remove('btn-outline-success');
+    btn.classList.add('btn-outline-secondary');
+    badge.classList.add('d-none');
+
+    const comparison = typeof window.compareSmartDnsVersions === 'function'
+        ? window.compareSmartDnsVersions(current, latest)
+        : null;
+
+    if (comparison === 1) {
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-outline-success');
         btn.disabled = false;
         btn.title = `Доступна новая версия: v${latest}\nНажмите для обновления`;
         badge.classList.remove('d-none');
+    } else if (comparison === null) {
+        btn.title = 'Не удалось проверить корректную версию на GitHub';
+    } else if (comparison < 0) {
+        btn.title = `Ветка main содержит более старую версию (v${latest}). Откат не предлагается.`;
     } else {
         btn.title = 'У вас установлена актуальная версия';
     }
@@ -457,18 +550,44 @@ async function checkUpdate() {
 async function performUpdate() {
     const btn = document.getElementById('btn-update');
     const latestVer = btn.title.match(/v([\d\.]+)/) ? btn.title.match(/v([\d\.]+)/)[1] : '';
-    
-    if (!confirm(`Найдена новая версия на GitHub${latestVer ? ' (' + latestVer + ')' : ''}. Скачать и установить? Страница будет перезагружена.`)) return;
-    
+
+    if (!confirm(`Найдена новая версия на GitHub${latestVer ? ' (' + latestVer + ')' : ''}. Скачать и установить?`)) return;
+
+    const originalButtonHtml = btn.innerHTML;
     btn.innerHTML = `<i class="bi bi-hourglass-split me-1"></i> Обновление...`;
     btn.disabled = true;
     document.getElementById('update-badge')?.classList.add('d-none');
-    
-    await apiCall('do_update');
-    
-    setTimeout(() => {
-        window.location.reload(true);
-    }, 8000);
+
+    const queued = await apiCall('do_update');
+    if (!queued) {
+        alert('Не удалось запустить обновление. Возможно, оно уже выполняется. Проверьте журнал /opt/var/log/smartdns-webui-update.log.');
+        btn.innerHTML = originalButtonHtml;
+        btn.disabled = false;
+        return;
+    }
+
+    // The API acknowledges only that the background updater was started.
+    // Wait for an explicit terminal state instead of assuming success after a fixed delay.
+    for (let attempt = 0; attempt < 120; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const status = (await apiCall('get_update_status')).trim();
+
+        if (status === 'SUCCESS') {
+            alert('Обновление завершено. Страница будет перезагружена.');
+            window.location.reload();
+            return;
+        }
+        if (status === 'ERROR') {
+            alert('Обновление завершилось с ошибкой. Проверьте журнал /opt/var/log/smartdns-webui-update.log.');
+            btn.innerHTML = originalButtonHtml;
+            btn.disabled = false;
+            return;
+        }
+    }
+
+    alert('Нет подтверждения завершения обновления за 4 минуты. Не запускайте обновление повторно; проверьте журнал /opt/var/log/smartdns-webui-update.log.');
+    btn.innerHTML = originalButtonHtml;
+    btn.disabled = false;
 }
 
 // === АКТИВАЦИЯ ПЕРЕТАСКИВАНИЯ (DRAG & DROP) ===
@@ -487,6 +606,53 @@ function initSortable() {
     });
 }
 
+// Theme preference
+window.toggleTheme = function() {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('smartdns-ui-theme', next); } catch (_) {}
+    const button = document.getElementById('theme-toggle');
+    if (window.rawEditor) window.rawEditor.refresh();
+    if (button) {
+        button.innerHTML = next === 'dark' ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon-stars"></i>';
+        button.title = next === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
+        button.setAttribute('aria-label', button.title);
+    }
+};
+(function initTheme() {
+    let saved = 'light';
+    try { saved = localStorage.getItem('smartdns-ui-theme') || 'light'; } catch (_) {}
+    document.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
+    const applyIcon = () => {
+        const button = document.getElementById('theme-toggle');
+        if (!button) return;
+        button.innerHTML = saved === 'dark' ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon-stars"></i>';
+        button.title = saved === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
+        button.setAttribute('aria-label', button.title);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyIcon); else applyIcon();
+})();
+
+window.refreshRouteFileOptions = async function() {
+    const selects = Array.from(document.querySelectorAll('.route-file-select'));
+    if (!selects.length) return;
+    let names = [];
+    try { names = (await apiCall('get_lists')).split('\n').map(name => name.trim()).filter(Boolean); } catch (_) { return; }
+    selects.forEach(select => {
+        const current = select.value || select.dataset.currentPath || '';
+        const options = ['<option value="">Выберите список…</option>'];
+        names.forEach(name => {
+            const path = name.startsWith('/') ? name : '/opt/etc/smartdns/domains/' + name;
+            options.push('<option value="' + UI.escape(path) + '">' + UI.escape(name) + '</option>');
+        });
+        const currentExists = names.some(name => current === name || current === (name.startsWith('/') ? name : '/opt/etc/smartdns/domains/' + name));
+        if (current && !currentExists) options.push('<option value="' + UI.escape(current) + '">' + UI.escape(current) + ' (путь из конфига)</option>');
+        select.innerHTML = options.join('');
+        select.value = current;
+        select.dataset.currentPath = current;
+    });
+};
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
 function initApp() {
     const path = window.location.pathname.replace('/', '');
