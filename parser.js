@@ -116,7 +116,7 @@ const UI = {
                 <button class="btn btn-sm btn-outline-primary" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить список</button>
                 <div class="d-flex align-items-center">
                     <label class="small text-muted me-2">DNS-группа</label>
-                    <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty()"></select>
+                    <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty()"><option value="${UI.escape(group)}" selected>${UI.escape(group)}</option></select>
                 </div>
             </div>
         </div>`,
