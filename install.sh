@@ -6,7 +6,7 @@ CONF_DIR="/opt/etc/lighttpd/conf.d"
 LIGHTTPD_INIT="/opt/etc/init.d/S80lighttpd"
 LIGHTTPD_CONF="/opt/etc/lighttpd/lighttpd.conf"
 REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/main"
-FILES="index.cgi api.sh template.html parser.js app.js version.txt"
+FILES="index.cgi api.sh template.html parser.js app.js version.txt setup-auth.sh"
 T="$(date +%Y%m%d-%H%M%S)-$$"
 BACKUP_ROOT="/opt/var/backups/smartdns-webui"
 BACKUP_DIR="$BACKUP_ROOT/$T"
@@ -113,7 +113,7 @@ echo "[4/5] Установка проверенных файлов..."
 for name in $FILES; do
     chmod 644 "$STAGE_DIR/$name" || fail "chmod не удался для $name"
 done
-chmod 755 "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh" ||
+chmod 755 "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh" "$STAGE_DIR/setup-auth.sh" ||
     fail "не удалось установить права CGI-файлов"
 chmod 644 "$STAGE_DIR/$CONF_NAME" || fail "не удалось установить права конфига"
 
@@ -150,4 +150,5 @@ echo "========================================"
 echo "Установка/обновление завершено."
 echo "Резервная копия: $BACKUP_DIR"
 echo "Интерфейс: http://<IP_РОУТЕРА>:3000"
+echo "Если авторизация ещё не настроена, подключитесь по SSH и выполните: sh $WEB_DIR/setup-auth.sh"
 echo "========================================"
