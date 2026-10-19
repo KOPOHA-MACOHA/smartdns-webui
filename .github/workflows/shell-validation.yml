@@ -1,0 +1,56 @@
+name: Shell validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check app.js
+          node --check parser.js
+          node --check validator.js
+          node --check version.js
+
+      - name: Run JavaScript regression tests when present
+        run: |
+          for test_file in tests/*.test.cjs; do
+            [ -f "$test_file" ] || continue
+            node --test "$test_file"
+          done
+
+      - name: Check POSIX shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f \( -name '*.sh' -o -name '*.cgi' \) \
+            -not -path './.git/*' -print0 |
+            while IFS= read -r -d '' file; do
+              echo "Checking syntax: $file"
+              sh -n "$file"
+            done
+
+      - name: Run ShellCheck on shell scripts and CGI entry points
+        run: |
+          find . -type f \( -name '*.sh' -o -name '*.cgi' \) \
+            -not -path './.git/*' -print0 |
+            xargs -0 shellcheck --severity=error
