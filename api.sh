@@ -124,7 +124,7 @@ handle_api() {
             cat "$CONF_FILE" 2>/dev/null
             ;;
         "get_lists")
-            ls -1 "$DOMAINS_DIR" 2>/dev/null | grep '\\.list$'
+            ls -1 "$DOMAINS_DIR" 2>/dev/null | grep '\.list$'
             ;;
         "get_list")
             if valid_list_target "$TARGET"; then
