@@ -3,7 +3,7 @@
 
     function compareSmartDnsVersions(current, latest) {
         const parse = value => {
-            if (typeof value !== 'string' || !/^\\d+\\.\\d+\\.\\d+$/.test(value)) return null;
+            if (typeof value !== 'string' || !/^\d+\.\d+\.\d+$/.test(value)) return null;
             return value.split('.').map(part => Number(part));
         };
 
