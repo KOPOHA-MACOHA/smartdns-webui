@@ -39,6 +39,16 @@ restore_backup() {
     fi
 }
 
+lighttpd_healthy() {
+    # pidof alone is insufficient: confirm the local HTTP listener responds.
+    [ -n "$(pidof lighttpd 2>/dev/null)" ] || return 1
+    code="$(curl -sS --connect-timeout 3 --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/ 2>/dev/null)" || return 1
+    case "$code" in
+        [1-5][0-9][0-9]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 cleanup() {
     rm -rf "$STAGE_DIR"
 }
@@ -130,13 +140,26 @@ LIGHTTPD_BIN="/opt/sbin/lighttpd"
 [ -f "$LIGHTTPD_CONF" ] || fail "не найден основной конфиг $LIGHTTPD_CONF; установка отменена"
 if ! "$LIGHTTPD_BIN" -tt -f "$LIGHTTPD_CONF"; then
     restore_backup
+    CHANGED=0
     fail "проверка конфигурации lighttpd не пройдена; файлы восстановлены"
 fi
 
-if ! "$LIGHTTPD_INIT" restart; then
-    restore_backup
-    "$LIGHTTPD_INIT" restart || true
-    fail "lighttpd не перезапустился; выполнен откат файлов"
+RESTART_RC=0
+"$LIGHTTPD_INIT" restart || RESTART_RC=$?
+if [ "$RESTART_RC" -ne 0 ]; then
+    # Entware's rc.func can return failure even when the daemon has come up.
+    # Do not roll back a live, responding service solely because of that code.
+    if lighttpd_healthy; then
+        echo "WARNING: restart вернул код $RESTART_RC, но lighttpd отвечает по HTTP; откат не выполняется."
+    else
+        restore_backup
+        CHANGED=0
+        # Recover only if the daemon is absent; never blindly restart a live process.
+        if [ -z "$(pidof lighttpd 2>/dev/null)" ]; then
+            "$LIGHTTPD_INIT" start || echo "WARNING: не удалось запустить lighttpd после отката" >&2
+        fi
+        fail "после перезапуска lighttpd не отвечает; файлы восстановлены, служба требует проверки"
+    fi
 fi
 
 # Remove artifacts from the earlier panel-specific-password implementation.
