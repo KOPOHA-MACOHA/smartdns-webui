@@ -118,7 +118,7 @@ const UI = {
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <div class="editable-name route-editable-name flex-grow-1">
                     <span class="route-name-display fw-semibold">${UI.escape(name || 'Новый маршрут')}</span>
-                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty()" onblur="finishInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
+                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty()" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
@@ -141,7 +141,7 @@ const UI = {
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <div class="editable-name group-editable-name flex-grow-1">
                     <span class="group-name-display fw-semibold">${UI.escape(name || 'Новая DNS-группа')}</span>
-                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onblur="finishInlineEdit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
+                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
