@@ -29,6 +29,10 @@ jobs:
           node --check app.js
           node --check parser.js
 
+      - name: Run parser regression tests when present
+        run: |
+          if [ -f tests/parser.test.cjs ]; then node --test tests/parser.test.cjs; fi
+
       - name: Check POSIX shell syntax
         shell: bash
         run: |
