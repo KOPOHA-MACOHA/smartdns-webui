@@ -26,6 +26,8 @@ fail() {
 
 [ "$(id -u)" = "0" ] || fail "запустите скрипт от root Entware"
 [ -x "$LIGHTTPD_INIT" ] || fail "не найден $LIGHTTPD_INIT"
+[ -x "$LIGHTTPD_BIN" ] || fail "не найден $LIGHTTPD_BIN"
+[ -f "$LIGHTTPD_CONF" ] || fail "не найден $LIGHTTPD_CONF"
 command -v openssl >/dev/null 2>&1 || fail "не найден openssl; установите пакет openssl-util Entware"
 [ -d "$AUTH_DIR" ] || fail "не найден каталог $AUTH_DIR"
 
@@ -79,12 +81,10 @@ if [ -f "$AUTH_FILE" ]; then
 fi
 mv -f "$TMP_FILE" "$AUTH_FILE" || fail "не удалось установить файл авторизации"
 
-if [ -x "$LIGHTTPD_BIN" ] && [ -f "$LIGHTTPD_CONF" ]; then
-    if ! "$LIGHTTPD_BIN" -tt -f "$LIGHTTPD_CONF"; then
-        [ ! -f "$BACKUP_FILE" ] || cp -p "$BACKUP_FILE" "$AUTH_FILE"
-        [ -f "$BACKUP_FILE" ] || rm -f "$AUTH_FILE"
-        fail "проверка конфигурации lighttpd не пройдена; предыдущий файл восстановлен"
-    fi
+if ! "$LIGHTTPD_BIN" -tt -f "$LIGHTTPD_CONF"; then
+    [ ! -f "$BACKUP_FILE" ] || cp -p "$BACKUP_FILE" "$AUTH_FILE"
+    [ -f "$BACKUP_FILE" ] || rm -f "$AUTH_FILE"
+    fail "проверка конфигурации lighttpd не пройдена; предыдущий файл восстановлен"
 fi
 
 if ! "$LIGHTTPD_INIT" restart; then
