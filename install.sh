@@ -38,7 +38,17 @@ restore_backup() {
 cleanup() {
     rm -rf "$STAGE_DIR"
 }
-trap cleanup EXIT HUP INT TERM
+
+on_exit() {
+    status=$?
+    if [ "$status" -ne 0 ] && [ "$CHANGED" -eq 1 ]; then
+        restore_backup
+    fi
+    cleanup
+    exit "$status"
+}
+trap on_exit EXIT
+trap 'exit 1' HUP INT TERM
 
 echo "========================================"
 echo "  SmartDNS WebUI для Entware"
@@ -98,17 +108,17 @@ chmod 755 "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh" ||
     fail "не удалось установить права CGI-файлов"
 chmod 644 "$STAGE_DIR/$CONF_NAME" || fail "не удалось установить права конфига"
 
+CHANGED=1
 for name in $FILES; do
-    cp "$STAGE_DIR/$name" "$WEB_DIR/.$name.new.$$" ||
+    cp "$STAGE_DIR/$name" "$WEB_DIR/.$name.new.$" ||
         fail "не удалось подготовить $name"
     mv -f "$WEB_DIR/.$name.new.$$" "$WEB_DIR/$name" ||
         fail "не удалось заменить $name"
 done
 cp "$STAGE_DIR/$CONF_NAME" "$CONF_DIR/.$CONF_NAME.new.$$" ||
     fail "не удалось подготовить конфиг lighttpd"
-mv -f "$CONF_DIR/.$CONF_NAME.new.$$" "$CONF_DIR/$CONF_NAME" ||
+mv -f "$CONF_DIR/.$CONF_NAME.new.$" "$CONF_DIR/$CONF_NAME" ||
     fail "не удалось установить конфиг lighttpd"
-CHANGED=1
 
 echo "[5/5] Проверка конфигурации и перезапуск lighttpd..."
 LIGHTTPD_BIN="/opt/sbin/lighttpd"
