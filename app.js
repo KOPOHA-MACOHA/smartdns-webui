@@ -187,24 +187,40 @@ window.addEventListener('popstate', (e) => {
 
 // === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
 async function validateConfigLogical(text) {
-    // Group names are used as a single SmartDNS -group argument.
-    const groupNames = Array.from(document.querySelectorAll('.group-name-input'))
-        .map(input => input.value.trim())
-        .filter(Boolean);
+    const lines = text.split('\n');
+    const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
+    let groupNames;
+    if (currentSettingsMode === 'ui') {
+        groupNames = Array.from(document.querySelectorAll('.group-name-input'))
+            .map(input => input.value.trim())
+            .filter(Boolean);
+    } else {
+        // Raw mode must validate names from the text being saved, not stale UI inputs.
+        const rawGroupNames = [];
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const cmd = trimmed.split(/\s+/)[0];
+            if (!validServers.includes(cmd)) continue;
+            const regex = /(?:\s|^)-group\s+([^\s]+)/g;
+            let match;
+            while ((match = regex.exec(trimmed)) !== null) rawGroupNames.push(match[1]);
+        }
+        groupNames = Array.from(new Set(rawGroupNames));
+    }
     const invalidGroupName = groupNames.find(name => !/^[A-Za-z0-9_.-]+$/.test(name));
     if (invalidGroupName) {
         return `Некорректное имя DNS-группы: "${invalidGroupName}".\nИспользуйте только латинские буквы, цифры, точку, дефис и подчёркивание. Пробелы не допускаются.`;
     }
-    const seenGroupNames = new Set();
-    for (const name of groupNames) {
-        if (seenGroupNames.has(name)) {
-            return `DNS-группа "${name}" указана несколько раз. Имена групп должны быть уникальными.`;
+    if (currentSettingsMode === 'ui') {
+        const seenGroupNames = new Set();
+        for (const name of groupNames) {
+            if (seenGroupNames.has(name)) {
+                return `DNS-группа "${name}" указана несколько раз. Имена групп должны быть уникальными.`;
+            }
+            seenGroupNames.add(name);
         }
-        seenGroupNames.add(name);
     }
-
-    const lines = text.split('\n');
-    const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     
     let definedGroups = ['fallback', '#', '-']; 
     let usedLists = [];
