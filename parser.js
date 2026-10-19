@@ -60,21 +60,22 @@ const UI = {
     
     dnsServerRow: (value) => {
         const raw = (value || '').trim();
-        const displayValue = raw.replace(/^#+\\s*/, '')
-            .replace(/\\s+-bootstrap-dns\\b/g, '')
-            .replace(/\\s+-exclude-default-group\\b/g, '')
-            .replace(/\\s+-group\\s+[^\\s]+/g, '')
+        const displayValue = raw.replace(/^#+\s*/, '')
+            .replace(/\s+-bootstrap-dns\b/g, '')
+            .replace(/\s+-exclude-default-group\b/g, '')
+            .replace(/\s+-group\s+[^\s]+/g, '')
             .trim();
         const parts = window.parseDnsModalValue ? window.parseDnsModalValue(displayValue) : { type: 'udp4', address: displayValue, port: '', path: '/dns-query', options: '' };
         const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
         const endpoint = [parts.address || '', parts.port ? ':' + parts.port : '', ['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : ''].join('');
         const protocol = /^#/.test(raw) ? 'Отключён' : (labels[parts.type] || 'DNS');
-        return '<div class="dns-server-row d-flex align-items-center gap-3">' +
-            '<span class="dns-protocol">' + UI.escape(protocol) + '</span>' +
-            '<span class="dns-endpoint flex-grow-1 text-truncate" title="' + UI.escape(endpoint) + '">' + UI.escape(endpoint) + '</span>' +
-            '<input type="hidden" class="dns-value" value="' + UI.escape(displayValue) + '">' +
-            '<button type="button" class="icon-action" onclick="openDnsModal(this.closest(\\'.dns-server-list\\'), this.closest(\\'.dns-server-row\\'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>' +
-            '<button type="button" class="icon-action danger" onclick="this.closest(\\'.dns-server-row\\').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button></div>';
+        return \`<div class="dns-server-row d-flex align-items-center gap-3">
+            <span class="dns-protocol">\${UI.escape(protocol)}</span>
+            <span class="dns-endpoint flex-grow-1 text-truncate" title="\${UI.escape(endpoint)}">\${UI.escape(endpoint)}</span>
+            <input type="hidden" class="dns-value" value="\${UI.escape(displayValue)}">
+            <button type="button" class="icon-action" onclick="openDnsModal(this.closest('.dns-server-list'), this.closest('.dns-server-row'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>
+            <button type="button" class="icon-action danger" onclick="this.closest('.dns-server-row').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button>
+        </div>\`;
     },
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
@@ -279,10 +280,10 @@ window.renameDnsGroup = function(input) {
 
 window.parseDnsModalValue = function(value) {
     let line = String(value || '').trim();
-    if (line.startsWith('#')) line = line.replace(/^#+\\s*/, '');
+    if (line.startsWith('#')) line = line.replace(/^#+\s*/, '');
     let type = 'udp4';
     let payload = line;
-    const cmd = line.match(/^(server(?:-[a-z0-9]+)?)\\s+(.+)$/i);
+    const cmd = line.match(/^(server(?:-[a-z0-9]+)?)\s+(.+)$/i);
     if (cmd) {
         payload = cmd[2].trim();
         const directive = cmd[1].toLowerCase();
@@ -291,17 +292,17 @@ window.parseDnsModalValue = function(value) {
         else if (directive === 'server-https') type = 'doh';
         else if (directive === 'server-h3') type = 'h3';
         else if (directive === 'server-tcp') type = 'tcp';
-        else type = payload.includes(':') && !payload.startsWith('[') && !/^\\d+\\.\\d+\\.\\d+\\.\\d+/.test(payload) ? 'udp6' : 'udp4';
-    } else if (/^(?:dot|tls):\\/\\//i.test(payload)) type = 'dot';
-    else if (/^(?:doq|quic):\\/\\//i.test(payload)) type = 'doq';
-    else if (/^https:\\/\\//i.test(payload)) type = 'doh';
-    else if (/^h3:\\/\\//i.test(payload)) type = 'h3';
-    else if (/^tcp:\\/\\//i.test(payload)) type = 'tcp';
+        else type = payload.startsWith('[') ? 'udp6' : (/^[0-9a-f:]+$/i.test(payload.split(/\s/)[0]) && payload.includes(':') ? 'udp6' : 'udp4');
+    } else if (/^(?:dot|tls):\/\//i.test(payload)) type = 'dot';
+    else if (/^(?:doq|quic):\/\//i.test(payload)) type = 'doq';
+    else if (/^https:\/\//i.test(payload)) type = 'doh';
+    else if (/^h3:\/\//i.test(payload)) type = 'h3';
+    else if (/^tcp:\/\//i.test(payload)) type = 'tcp';
 
-    const firstSpace = payload.search(/\\s/);
+    const firstSpace = payload.search(/\s/);
     let endpoint = firstSpace < 0 ? payload : payload.slice(0, firstSpace);
     const options = firstSpace < 0 ? '' : payload.slice(firstSpace).trim();
-    const schemes = { dot: /^(?:dot|tls):\\/\\//i, doq: /^(?:doq|quic):\\/\\//i, doh: /^https:\\/\\//i, h3: /^h3:\\/\\//i, tcp: /^tcp:\\/\\//i };
+    const schemes = { dot: /^(?:dot|tls):\/\//i, doq: /^(?:doq|quic):\/\//i, doh: /^https:\/\//i, h3: /^h3:\/\//i, tcp: /^tcp:\/\//i };
     if (schemes[type]) endpoint = endpoint.replace(schemes[type], '');
 
     let address = endpoint, port = '', path = '/dns-query';
@@ -320,14 +321,9 @@ window.parseDnsModalValue = function(value) {
         const colonCount = (endpoint.match(/:/g) || []).length;
         if (colonCount === 1) {
             const idx = endpoint.lastIndexOf(':');
-            if (/^\\d+$/.test(endpoint.slice(idx + 1))) { address = endpoint.slice(0, idx); port = endpoint.slice(idx + 1); }
+            if (/^\d+$/.test(endpoint.slice(idx + 1))) { address = endpoint.slice(0, idx); port = endpoint.slice(idx + 1); }
         }
         if (colonCount > 1) address = endpoint;
-    }
-    if (!['doh','h3'].includes(type) && ['dot','doq','tcp'].includes(type) && !port) {
-        const defaults = { dot: '853', doq: '853', tcp: '53' };
-        // Leave default ports blank in the form; SmartDNS will use its protocol default.
-        port = '';
     }
     return { type, address, port, path, options };
 };
