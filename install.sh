@@ -5,7 +5,11 @@ WEB_DIR="/opt/share/www/smartdns"
 CONF_DIR="/opt/etc/lighttpd/conf.d"
 LIGHTTPD_INIT="/opt/etc/init.d/S80lighttpd"
 LIGHTTPD_CONF="/opt/etc/lighttpd/lighttpd.conf"
-REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/main"
+REPO_REF="${REPO_REF:-main}"
+case "$REPO_REF" in
+    *[!A-Za-z0-9._/-]*|""|/*|*..*) echo "ERROR: некорректный REPO_REF" >&2; exit 1 ;;
+esac
+REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/$REPO_REF"
 FILES="index.cgi api.sh template.html parser.js app.js version.txt"
 T="$(date +%Y%m%d-%H%M%S)-$$"
 BACKUP_ROOT="/opt/var/backups/smartdns-webui"
