@@ -263,12 +263,20 @@ async function globalSave() {
             return false; 
         }
         
-        await apiCall('save_config', null, contentToSave);
+        const saved = await apiCall('save_config', null, contentToSave);
+        if (!saved) {
+            alert('Не удалось сохранить конфигурацию. Исходное состояние не изменено.');
+            return false;
+        }
         originalConfigContent = contentToSave; 
         
     } else if (activeTab === 'lists' && activeList) {
         contentToSave = document.getElementById('list-content').value;
-        await apiCall('save_list', activeList, contentToSave);
+        const saved = await apiCall('save_list', activeList, contentToSave);
+        if (!saved) {
+            alert('Не удалось сохранить список. Изменения остались в редакторе.');
+            return false;
+        }
         originalListContent = contentToSave; 
     }
     
@@ -300,8 +308,12 @@ async function restartService() {
         const saved = await globalSave();
         if (!saved) return;
     }
-    await apiCall('restart_service');
-    alert('Конфигурация применена, сервис перезапущен!');
+    const restarted = await apiCall('restart_service');
+    if (!restarted) {
+        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.');
+        return;
+    }
+    alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
 }
 
 async function loadLists() {
