@@ -69,7 +69,7 @@ const UI = {
         const displayValue = isComment ? '# ' + cleanLine : cleanLine;
         const parts = window.parseDnsModalValue ? window.parseDnsModalValue(displayValue) : { type: 'udp4', address: displayValue, port: '', path: '/dns-query', options: '' };
         const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
-        const endpoint = [parts.address || '', parts.port ? ':' + parts.port : '', ['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : ''].join('');
+        const endpoint = (parts.type === 'doh' ? 'https://' : parts.type === 'h3' ? 'h3://' : '') + (parts.address || '') + (parts.port ? ':' + parts.port : '') + (['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : '');
         const protocol = isComment ? 'Отключён' : (labels[parts.type] || 'DNS');
         return `<div class="dns-server-row d-flex align-items-center gap-3">
             <span class="dns-protocol">${UI.escape(protocol)}</span>
@@ -365,6 +365,11 @@ window.updateDnsModalFields = function() {
     const type = document.getElementById('dns-type')?.value || 'udp4';
     const pathRow = document.getElementById('dns-path-row');
     if (pathRow) pathRow.classList.toggle('d-none', !['doh','h3'].includes(type));
+    const scheme = document.getElementById('dns-address-scheme');
+    if (scheme) {
+        scheme.textContent = type === 'doh' ? 'https://' : type === 'h3' ? 'h3://' : '';
+        scheme.classList.toggle('d-none', !['doh','h3'].includes(type));
+    }
     const port = document.getElementById('dns-port');
     if (port) port.placeholder = ({udp4:'53',udp6:'53',tcp:'53',dot:'853',doq:'853',doh:'443',h3:'443'})[type] || 'Порт';
 };
