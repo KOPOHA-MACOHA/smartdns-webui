@@ -50,7 +50,7 @@ authenticate_entware_root() {
         *) return 1 ;;
     esac
 
-    COMPUTED_HASH=$(openssl passwd "$AUTH_ALGO" -salt "$AUTH_SALT" "$AUTH_PASSWORD" 2>/dev/null) || {
+    COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | openssl passwd "$AUTH_ALGO" -salt "$AUTH_SALT" -stdin 2>/dev/null) || {
         unset AUTH_PASSWORD
         return 1
     }
