@@ -110,7 +110,7 @@ const UI = {
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
             </div>
             <div class="route-files-list">
-                ${(files || '').split(/\r?\n/).filter(f => f.trim()).map(f => UI.routeFileRow(f.replace(/^#\s*/,''))).join('') || '<div class="route-files-empty settings-section-hint mb-2">Списки ещё не добавлены</div>'}
+                ${(files || '').split(/\r?\n/).filter(f => f.trim()).map(f => UI.routeFileRow(f)).join('') || '<div class="route-files-empty settings-section-hint mb-2">Списки ещё не добавлены</div>'}
             </div>
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
                 <button class="btn btn-sm btn-outline-primary" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить список</button>
