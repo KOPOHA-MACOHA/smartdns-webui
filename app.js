@@ -457,25 +457,44 @@ async function checkUpdate() {
 async function performUpdate() {
     const btn = document.getElementById('btn-update');
     const latestVer = btn.title.match(/v([\d\.]+)/) ? btn.title.match(/v([\d\.]+)/)[1] : '';
-    
-    if (!confirm(`Найдена новая версия на GitHub${latestVer ? ' (' + latestVer + ')' : ''}. Скачать и установить? Страница будет перезагружена.`)) return;
-    
+
+    if (!confirm(`Найдена новая версия на GitHub${latestVer ? ' (' + latestVer + ')' : ''}. Скачать и установить?`)) return;
+
     const originalButtonHtml = btn.innerHTML;
     btn.innerHTML = `<i class="bi bi-hourglass-split me-1"></i> Обновление...`;
     btn.disabled = true;
     document.getElementById('update-badge')?.classList.add('d-none');
-    
+
     const queued = await apiCall('do_update');
     if (!queued) {
-        alert('Не удалось запустить обновление. Проверьте доступ к роутеру и повторите попытку.');
+        alert('Не удалось запустить обновление. Возможно, оно уже выполняется. Проверьте журнал /opt/var/log/smartdns-webui-update.log.');
         btn.innerHTML = originalButtonHtml;
         btn.disabled = false;
         return;
     }
 
-    setTimeout(() => {
-        window.location.reload(true);
-    }, 8000);
+    // The API acknowledges only that the background updater was started.
+    // Wait for an explicit terminal state instead of assuming success after a fixed delay.
+    for (let attempt = 0; attempt < 120; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const status = (await apiCall('get_update_status')).trim();
+
+        if (status === 'SUCCESS') {
+            alert('Обновление завершено. Страница будет перезагружена.');
+            window.location.reload();
+            return;
+        }
+        if (status === 'ERROR') {
+            alert('Обновление завершилось с ошибкой. Проверьте журнал /opt/var/log/smartdns-webui-update.log.');
+            btn.innerHTML = originalButtonHtml;
+            btn.disabled = false;
+            return;
+        }
+    }
+
+    alert('Нет подтверждения завершения обновления за 4 минуты. Не запускайте обновление повторно; проверьте журнал /opt/var/log/smartdns-webui-update.log.');
+    btn.innerHTML = originalButtonHtml;
+    btn.disabled = false;
 }
 
 // === АКТИВАЦИЯ ПЕРЕТАСКИВАНИЯ (DRAG & DROP) ===
