@@ -63,7 +63,7 @@ const UI = {
         const rows = Math.max(3, Math.min(15, linesArr.length));
         return `
         <div class="card bg-dark border-secondary mb-3 shadow-sm">
-            <div class="card-header border-secondary section-header py-2"><span>${title}</span></div>
+            <div class="card-header border-secondary section-header py-2 d-flex justify-content-between align-items-center"><span>${title}</span>${['bootstrap','upstream','fallback'].includes(id) ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="openDnsModal(document.getElementById(\'sec-' + id + '\'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>' : ''}</div>
             <div class="card-body p-0">
                 ${notice ? `<div class="p-2 text-muted small border-bottom border-secondary" style="font-size:0.75rem;">${notice}</div>` : ''}
                 <textarea id="sec-${id}" class="form-control code-font border-0 rounded-0 p-2" rows="${rows}" oninput="markConfigDirty()">${UI.escape(val)}</textarea>
@@ -260,7 +260,7 @@ window.renameDnsGroup = function(input) {
 window.openDnsModal = function(groupItem) {
     const modal = document.getElementById('dns-server-modal');
     if (!modal || !window.bootstrap) return;
-    window.dnsModalGroupTarget = groupItem;
+    window.dnsModalTextareaTarget = groupItem?.matches?.('textarea') ? groupItem : groupItem?.querySelector('.group-content-input');
     document.getElementById('dns-type').value = 'udp4';
     document.getElementById('dns-address').value = '';
     document.getElementById('dns-path').value = '/dns-query';
@@ -283,14 +283,15 @@ window.addDnsServerFromModal = function() {
     const port = document.getElementById('dns-port').value.trim();
     const path = document.getElementById('dns-path').value.trim() || '/dns-query';
     if (!address) { alert('Укажите адрес DNS-сервера.'); return; }
+    const host = address.includes(':') && !address.startsWith('[') ? '[' + address + ']' : address;
     let line;
-    if (type === 'dot') line = 'dot://' + address + (port ? ':' + port : '');
-    else if (type === 'doq') line = 'doq://' + address + (port ? ':' + port : '');
-    else if (type === 'doh') line = 'server-https https://' + address + (port ? ':' + port : '') + path;
-    else if (type === 'h3') line = 'server-h3 h3://' + address + (port ? ':' + port : '') + path;
-    else if (type === 'tcp') line = 'server-tcp ' + address + (port ? ':' + port : '');
-    else line = address + (port && port !== '53' ? ':' + port : '');
-    const textarea = window.dnsModalGroupTarget?.querySelector('.group-content-input');
+    if (type === 'dot') line = 'dot://' + host + (port ? ':' + port : '');
+    else if (type === 'doq') line = 'doq://' + host + (port ? ':' + port : '');
+    else if (type === 'doh') line = 'server-https https://' + host + (port ? ':' + port : '') + path;
+    else if (type === 'h3') line = 'server-h3 h3://' + host + (port ? ':' + port : '') + path;
+    else if (type === 'tcp') line = 'server-tcp ' + host + (port ? ':' + port : '');
+    else line = host + (port && port !== '53' ? ':' + port : '');
+    const textarea = window.dnsModalTextareaTarget;
     if (!textarea) return;
     textarea.value = textarea.value.trim() ? textarea.value.trim() + '\n' + line : line;
     textarea.dispatchEvent(new Event('input', {bubbles:true}));
