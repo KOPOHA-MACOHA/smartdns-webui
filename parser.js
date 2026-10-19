@@ -210,16 +210,13 @@ function parseConfigToSections(content) {
             if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2].replace(/,/g, '') });
             else other.push(originalTrimmed);
         } else if (cmd === 'domain-set') {
-            let m = activeLine.match(/-name\s+([\w.-]+)\s+-file\s+(.+)$/);
+            let m = activeLine.match(/-name\s+([\w-]+)\s+-file\s+(.+)$/);
             if (m) {
                 if (!routesObj[m[1]]) routesObj[m[1]] = { group: '', files: [] };
                 routesObj[m[1]].files.push((isComment ? '# ' : '') + m[2]);
-            } else {
-                // Preserve unsupported or malformed domain-set directives in Raw/Other.
-                other.push(originalTrimmed);
             }
         } else if (cmd === 'nameserver') {
-            let m = activeLine.match(/\/domain-set:([\w.-]+)\/([\w.-]+)/);
+            let m = activeLine.match(/\/domain-set:([\w-]+)\/([\w-]+)/);
             if (m) {
                 if (!routesObj[m[1]]) routesObj[m[1]] = { group: '', files: [] };
                 if (!isComment) routesObj[m[1]].group = m[2];
