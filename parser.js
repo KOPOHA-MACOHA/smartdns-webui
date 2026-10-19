@@ -309,6 +309,7 @@ window.parseDnsModalValue = function(value) {
     if (['doh','h3'].includes(type)) {
         const pathIndex = endpoint.indexOf('/');
         if (pathIndex >= 0) { path = endpoint.slice(pathIndex) || '/dns-query'; endpoint = endpoint.slice(0, pathIndex); }
+        address = endpoint;
     }
     if (endpoint.startsWith('[')) {
         const close = endpoint.indexOf(']');
