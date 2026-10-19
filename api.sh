@@ -11,48 +11,141 @@ if [ "$TEST_MODE" = "1" ]; then
     CONF_FILE="/opt/tmp/smartdns_test.conf"
     DOMAINS_DIR="/opt/tmp/domains_test/"
     LOG_FILE="/opt/tmp/smartdns_test.log"
-    SERVICE_CMD="logger 'SmartDNS WebUI: Фейковый рестарт (TEST MODE)'"
 else
     CONF_FILE="/opt/etc/smartdns/smartdns.conf"
     DOMAINS_DIR="/opt/etc/smartdns/domains/"
     LOG_FILE="/opt/var/log/smartdns/smartdns.log"
-    SERVICE_CMD="/opt/etc/init.d/S*smartdns restart 2>/dev/null || systemctl restart smartdns"
 fi
 
-[ ! -f "$LOG_FILE" ] && touch "$LOG_FILE"
-[ ! -d "$DOMAINS_DIR" ] && mkdir -p "$DOMAINS_DIR"
+[ ! -f "$LOG_FILE" ] && touch "$LOG_FILE" 2>/dev/null
+[ ! -d "$DOMAINS_DIR" ] && mkdir -p "$DOMAINS_DIR" 2>/dev/null
 
-sanitize_target() {
-    echo "$1" | sed 's/\///g'
+# Accept only simple list filenames. Never allow slashes, traversal, or
+# unexpected characters from the HTTP_X_TARGET header.
+valid_list_target() {
+    case "$1" in
+        ""| "." | ".." | *[!A-Za-z0-9_.-]* | */*) return 1 ;;
+        *.list) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Write to a temporary file in the same directory, then atomically replace
+# the destination. Keep a copy of the previous file before replacing it.
+atomic_save() {
+    target_file="$1"
+    temp_file="${target_file}.tmp.$$"
+    backup_file="${target_file}.bak"
+
+    umask 077
+    if ! cat > "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # SmartDNS and the web UI need readable configuration/list files.
+    chmod 644 "$temp_file" || {
+        rm -f "$temp_file"
+        return 1
+    }
+
+    if [ -f "$target_file" ]; then
+        cp -p "$target_file" "$backup_file" || {
+            rm -f "$temp_file"
+            return 1
+        }
+    fi
+
+    if ! mv -f "$temp_file" "$target_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+    return 0
+}
+
+restart_smartdns() {
+    # Avoid eval and only execute an actual matching init script.
+    for service_script in /opt/etc/init.d/S*smartdns; do
+        if [ -f "$service_script" ] && [ -x "$service_script" ]; then
+            "$service_script" restart
+            return $?
+        fi
+    done
+
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl restart smartdns
+        return $?
+    fi
+    return 1
 }
 
 handle_api() {
     ACTION="$1"
-    TARGET=$(sanitize_target "$2")
+    TARGET="$2"
 
     case "$ACTION" in
-        "save_config") cat > "$CONF_FILE"; echo "OK" ;;
-        "save_list") [ -n "$TARGET" ] && cat > "${DOMAINS_DIR}${TARGET}"; echo "OK" ;;
-        "delete_list") [ -n "$TARGET" ] && rm -f "${DOMAINS_DIR}${TARGET}"; echo "OK" ;;
-        "clear_log") > "$LOG_FILE"; echo "OK" ;;
-        "restart_service") eval "$SERVICE_CMD"; echo "OK" ;;
-        "get_config") cat "$CONF_FILE" 2>/dev/null ;;
-        "get_lists") ls -1 "$DOMAINS_DIR" 2>/dev/null | grep '\.list$' ;;
-        "get_list") [ -n "$TARGET" ] && cat "${DOMAINS_DIR}${TARGET}" 2>/dev/null ;;
-        "get_log") cat "$LOG_FILE" 2>/dev/null ;;
-        
-        # --- БЛОК АВТООБНОВЛЕНИЯ ---
+        "save_config")
+            if atomic_save "$CONF_FILE"; then echo "OK"; else echo "ERROR: save_config failed"; fi
+            ;;
+        "save_list")
+            if ! valid_list_target "$TARGET"; then
+                echo "ERROR: invalid list filename"
+            elif atomic_save "${DOMAINS_DIR}${TARGET}"; then
+                echo "OK"
+            else
+                echo "ERROR: save_list failed"
+            fi
+            ;;
+        "delete_list")
+            if ! valid_list_target "$TARGET"; then
+                echo "ERROR: invalid list filename"
+            elif [ -f "${DOMAINS_DIR}${TARGET}" ] && rm -f "${DOMAINS_DIR}${TARGET}"; then
+                echo "OK"
+            elif [ ! -e "${DOMAINS_DIR}${TARGET}" ]; then
+                echo "ERROR: list not found"
+            else
+                echo "ERROR: delete_list failed"
+            fi
+            ;;
+        "clear_log")
+            if : > "$LOG_FILE"; then echo "OK"; else echo "ERROR: clear_log failed"; fi
+            ;;
+        "restart_service")
+            if [ "$TEST_MODE" = "1" ]; then
+                logger 'SmartDNS WebUI: Фейковый рестарт (TEST MODE)'
+                echo "OK"
+            elif restart_smartdns; then
+                echo "OK"
+            else
+                echo "ERROR: restart_service failed"
+            fi
+            ;;
+        "get_config")
+            cat "$CONF_FILE" 2>/dev/null
+            ;;
+        "get_lists")
+            ls -1 "$DOMAINS_DIR" 2>/dev/null | grep '\.list$'
+            ;;
+        "get_list")
+            if valid_list_target "$TARGET"; then
+                cat "${DOMAINS_DIR}${TARGET}" 2>/dev/null
+            else
+                echo "ERROR: invalid list filename"
+            fi
+            ;;
+        "get_log")
+            cat "$LOG_FILE" 2>/dev/null
+            ;;
         "get_update")
             # Проверяем версию без кэша GitHub (добавляем ?t=время)
-            LATEST=$(curl -sL "$REPO_URL/version.txt?t=$(date +%s)" 2>/dev/null | tr -d '\r\n')
+            LATEST=$(curl -fsSL "${REPO_URL}/version.txt?t=$(date +%s)" 2>/dev/null | tr -d '\r\n')
             [ -z "$LATEST" ] && LATEST="$CURRENT_VERSION"
-            
             echo "${CURRENT_VERSION}|${LATEST}"
             ;;
         "do_update")
-            # Download first, verify HTTP success and shell syntax, then run in background.
+            # Download to a temporary file, validate it, then execute; keep a log for diagnosis.
             (
-                UPDATE_TMP="/opt/tmp/smartdns-webui-update-$$.sh"
+                UPDATE_TMP="/opt/tmp/smartdns-webui-update-$.sh"
                 UPDATE_LOG="/opt/var/log/smartdns-webui-update.log"
                 mkdir -p /opt/tmp /opt/var/log 2>/dev/null
                 echo "[$(date)] Update started" > "$UPDATE_LOG"
@@ -76,6 +169,9 @@ handle_api() {
                 rm -f "$UPDATE_TMP"
             ) >/dev/null 2>&1 &
             echo "OK"
+            ;;
+        *)
+            echo "ERROR: unsupported action"
             ;;
     esac
 }
