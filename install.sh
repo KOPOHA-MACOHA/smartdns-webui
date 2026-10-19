@@ -122,13 +122,11 @@ mv -f "$CONF_DIR/.$CONF_NAME.new.$$" "$CONF_DIR/$CONF_NAME" ||
 
 echo "[5/5] Проверка конфигурации и перезапуск lighttpd..."
 LIGHTTPD_BIN="/opt/sbin/lighttpd"
-if [ -x "$LIGHTTPD_BIN" ] && [ -f "$LIGHTTPD_CONF" ]; then
-    if ! "$LIGHTTPD_BIN" -tt -f "$LIGHTTPD_CONF"; then
-        restore_backup
-        fail "проверка конфигурации lighttpd не пройдена; файлы восстановлены"
-    fi
-else
-    echo "WARNING: lighttpd или основной конфиг не найден; синтаксическая проверка пропущена" >&2
+[ -x "$LIGHTTPD_BIN" ] || fail "не найден исполняемый $LIGHTTPD_BIN; установка отменена"
+[ -f "$LIGHTTPD_CONF" ] || fail "не найден основной конфиг $LIGHTTPD_CONF; установка отменена"
+if ! "$LIGHTTPD_BIN" -tt -f "$LIGHTTPD_CONF"; then
+    restore_backup
+    fail "проверка конфигурации lighttpd не пройдена; файлы восстановлены"
 fi
 
 if ! "$LIGHTTPD_INIT" restart; then
