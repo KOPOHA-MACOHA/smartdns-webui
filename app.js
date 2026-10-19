@@ -307,14 +307,24 @@ async function restartService() {
 async function loadLists() {
     const listsRaw = await apiCall('get_lists');
     const lists = listsRaw.split('\n').filter(l => l.trim() !== '');
-    let html = '';
-    
-    lists.forEach(l => {
-        const activeClass = l === activeList ? 'active' : 'bg-dark text-light border-secondary';
-        html += `<a href="javascript:void(0);" onclick="selectList('${l}')" class="list-group-item list-group-item-action ${activeClass}"><i class="bi bi-file-earmark-text me-2"></i>${l}</a>`;
+    const container = document.getElementById('lists-container');
+    container.replaceChildren();
+
+    lists.forEach(name => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action ' +
+            (name === activeList ? 'active' : 'bg-dark text-light border-secondary');
+
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-file-earmark-text me-2';
+        item.append(icon, document.createTextNode(name));
+        item.addEventListener('click', event => {
+            event.preventDefault();
+            selectList(name);
+        });
+        container.appendChild(item);
     });
-    
-    document.getElementById('lists-container').innerHTML = html;
 
     if (!activeList && lists.length > 0) {
         await selectList(lists[0]);
@@ -358,16 +368,24 @@ async function createList() {
     let name = input.value.replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return;
     name += '.list';
-    await apiCall('save_list', name, '');
+    const saved = await apiCall('save_list', name, '');
+    if (!saved) {
+        alert('Не удалось создать список. Проверьте права доступа и журнал.');
+        return;
+    }
     input.value = '';
-    
-    await loadLists(); 
+
+    await loadLists();
     await selectList(name);
 }
 
 async function deleteList() {
     if (!activeList || !confirm('Точно удалить ' + activeList + '?')) return;
-    await apiCall('delete_list', activeList);
+    const deleted = await apiCall('delete_list', activeList);
+    if (!deleted) {
+        alert('Не удалось удалить список. Проверьте права доступа и журнал.');
+        return;
+    }
     activeList = '';
     const ta = document.getElementById('list-content');
     ta.value = ''; ta.disabled = true;
