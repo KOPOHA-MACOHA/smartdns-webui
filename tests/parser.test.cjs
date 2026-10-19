@@ -4,8 +4,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'parser.js'), 'utf8');
-const context = { window: {}, document: {} };
+const context = { document: {} };
 vm.createContext(context);
+context.window = context;
 vm.runInContext(source, context, { filename: 'parser.js' });
 
 const config = [
