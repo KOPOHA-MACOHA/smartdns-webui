@@ -460,6 +460,7 @@ async function performUpdate() {
     
     if (!confirm(`Найдена новая версия на GitHub${latestVer ? ' (' + latestVer + ')' : ''}. Скачать и установить? Страница будет перезагружена.`)) return;
     
+    const originalButtonHtml = btn.innerHTML;
     btn.innerHTML = `<i class="bi bi-hourglass-split me-1"></i> Обновление...`;
     btn.disabled = true;
     document.getElementById('update-badge')?.classList.add('d-none');
@@ -467,7 +468,7 @@ async function performUpdate() {
     const queued = await apiCall('do_update');
     if (!queued) {
         alert('Не удалось запустить обновление. Проверьте доступ к роутеру и повторите попытку.');
-        btn.innerHTML = '<i class="bi bi-github me-1"></i> v<span id="current-version-text"></span>';
+        btn.innerHTML = originalButtonHtml;
         btn.disabled = false;
         return;
     }
