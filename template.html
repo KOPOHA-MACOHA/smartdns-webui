@@ -86,7 +86,23 @@
         .route-group { width: 230px; }
         textarea.code-font { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; background: var(--field) !important; color: var(--text) !important; border: 1px solid var(--field-border) !important; resize: vertical; }
         #raw-config-text, #list-content, #log-content { background: #172331 !important; color: #e6edf5 !important; border-color: var(--line) !important; }
-        .CodeMirror { height: 70vh; border: 1px solid var(--line); border-radius: 7px; font: 13px ui-monospace, SFMono-Regular, Consolas, monospace; }
+        .CodeMirror { height: 70vh; border: 1px solid var(--line); border-radius: 7px; font: 13px ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--field) !important; color: var(--text) !important; }
+        .CodeMirror-gutters { background: var(--surface-muted) !important; border-right: 1px solid var(--line) !important; }
+        .CodeMirror-linenumber { color: var(--muted) !important; }
+        .CodeMirror-cursor { border-left: 1px solid var(--text) !important; }
+        .CodeMirror-selected { background: var(--accent-soft) !important; }
+        .cm-s-default .cm-comment { color: #7c8b9b; }
+        .cm-s-default .cm-keyword { color: #287bc1; font-weight: 600; }
+        .cm-s-default .cm-builtin { color: #8a54b8; }
+        .cm-s-default .cm-attribute { color: #bd6a20; }
+        .cm-s-default .cm-string { color: #27866d; }
+        .cm-s-default .cm-number { color: #bd6a20; }
+        :root[data-theme="dark"] .cm-s-default .cm-comment { color: #8294a8; }
+        :root[data-theme="dark"] .cm-s-default .cm-keyword { color: #8bc5ff; }
+        :root[data-theme="dark"] .cm-s-default .cm-builtin { color: #d1a1ff; }
+        :root[data-theme="dark"] .cm-s-default .cm-attribute { color: #ffc27a; }
+        :root[data-theme="dark"] .cm-s-default .cm-string { color: #8be0c3; }
+        :root[data-theme="dark"] .cm-s-default .cm-number { color: #ffc27a; }
         .list-group-item { background: var(--surface); color: var(--text); border-color: var(--line); }
         .list-group-item.active { background: var(--accent-soft); color: var(--accent); border-color: var(--line); }
         .modal-content { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-radius: 12px; }
@@ -109,7 +125,7 @@
             .dns-server-row { gap: 8px !important; }
             .dns-protocol { min-width: 58px; }
         }
-    </style>yle>
+    </style>
 </head>
 <body>
 
@@ -238,11 +254,13 @@
                         <input id="dns-path" class="form-control" type="text" value="/dns-query">
                     </div>
                 </div>
-                <div class="settings-section-hint mt-3">SmartDNS сформирует директиву и нужный протокол при сохранении конфига. TLS / QUIC / H3 не нужно дописывать вручную.</div>
+                <label class="form-label small mt-3" for="dns-options">Дополнительные параметры (необязательно)</label>
+                <input id="dns-options" class="form-control" type="text" placeholder="-tls-host-verify -tls-hostname example.com">
+                <div class="settings-section-hint mt-2">Можно изменить или удалить дополнительные параметры, например TLS-проверку и имя TLS-хоста. Протокол выбирается выше.</div>
             </div>
             <div class="modal-footer border-secondary">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
-                <button type="button" class="btn btn-primary" onclick="addDnsServerFromModal()"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
+                <button type="button" id="dns-modal-submit" class="btn btn-primary" onclick="addDnsServerFromModal()"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
             </div>
         </div>
     </div>
@@ -254,9 +272,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=13"></script>
+<script src="parser.js?v=14"></script>
 <script src="validator.js?v=1"></script>
 <script src="version.js?v=1"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
