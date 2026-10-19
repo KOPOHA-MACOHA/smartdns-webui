@@ -11,10 +11,10 @@ LIGHTTPD_CONF="/opt/etc/lighttpd/lighttpd.conf"
 LIGHTTPD_INIT="/opt/etc/init.d/S80lighttpd"
 LIGHTTPD_BIN="/opt/sbin/lighttpd"
 TMP_FILE="$AUTH_FILE.tmp.$$"
-BACKUP_FILE="$AUTH_FILE.bak.$$"
+BACKUP_FILE="$AUTH_FILE.bak"
 
 cleanup() {
-    rm -f "$TMP_FILE" "$BACKUP_FILE"
+    rm -f "$TMP_FILE"
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
@@ -96,4 +96,5 @@ fi
 
 echo "Авторизация настроена. Логин: root"
 echo "Файл хеша: $AUTH_FILE (права 640; пароль хранится только в виде хеша)."
+[ ! -f "$BACKUP_FILE" ] || echo "Предыдущий хеш сохранён в $BACKUP_FILE."
 echo "Открывайте панель только в LAN/VPN; HTTP Basic Auth без HTTPS не защищает пароль от прослушивания в незащищённой сети."
