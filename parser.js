@@ -60,21 +60,21 @@ const UI = {
     
     dnsServerRow: (value) => {
         const raw = (value || '').trim();
-        const displayValue = window.cleanDns ? window.cleanDns(raw, ['-bootstrap-dns', '-exclude-default-group', /\s+-group\s+[^\s]+/g]) : raw;
-        let protocol = 'DNS', endpoint = displayValue;
-        if (/^server-https\s+/i.test(displayValue)) { protocol = 'DoH'; endpoint = displayValue.replace(/^server-https\s+/i, ''); }
-        else if (/^server-h3\s+/i.test(displayValue)) { protocol = 'HTTP/3'; endpoint = displayValue.replace(/^server-h3\s+/i, ''); }
-        else if (/^server-tls\s+/i.test(displayValue) || /^dot:\/\//i.test(displayValue)) { protocol = 'DoT'; endpoint = displayValue.replace(/^server-tls\s+/i, '').replace(/^dot:\/\//i, ''); }
-        else if (/^server-quic\s+/i.test(displayValue) || /^doq:\/\//i.test(displayValue)) { protocol = 'DoQ'; endpoint = displayValue.replace(/^server-quic\s+/i, '').replace(/^doq:\/\//i, ''); }
-        else if (/^server-tcp\s+/i.test(displayValue) || /^tcp:\/\//i.test(displayValue)) { protocol = 'TCP'; endpoint = displayValue.replace(/^server-tcp\s+/i, '').replace(/^tcp:\/\//i, ''); }
-        else if (/^https:\/\//i.test(displayValue)) protocol = 'DoH';
-        else if (/^h3:\/\//i.test(displayValue)) protocol = 'HTTP/3';
-        else if (/^#/i.test(raw)) protocol = 'Отключён';
+        const displayValue = raw.replace(/^#+\\s*/, '')
+            .replace(/\\s+-bootstrap-dns\\b/g, '')
+            .replace(/\\s+-exclude-default-group\\b/g, '')
+            .replace(/\\s+-group\\s+[^\\s]+/g, '')
+            .trim();
+        const parts = window.parseDnsModalValue ? window.parseDnsModalValue(displayValue) : { type: 'udp4', address: displayValue, port: '', path: '/dns-query', options: '' };
+        const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
+        const endpoint = [parts.address || '', parts.port ? ':' + parts.port : '', ['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : ''].join('');
+        const protocol = /^#/.test(raw) ? 'Отключён' : (labels[parts.type] || 'DNS');
         return '<div class="dns-server-row d-flex align-items-center gap-3">' +
             '<span class="dns-protocol">' + UI.escape(protocol) + '</span>' +
             '<span class="dns-endpoint flex-grow-1 text-truncate" title="' + UI.escape(endpoint) + '">' + UI.escape(endpoint) + '</span>' +
             '<input type="hidden" class="dns-value" value="' + UI.escape(displayValue) + '">' +
-            '<button type="button" class="icon-action danger" onclick="this.closest(\'.dns-server-row\').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button></div>';
+            '<button type="button" class="icon-action" onclick="openDnsModal(this.closest(\\'.dns-server-list\\'), this.closest(\\'.dns-server-row\\'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="icon-action danger" onclick="this.closest(\\'.dns-server-row\\').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button></div>';
     },
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
@@ -277,15 +277,86 @@ window.renameDnsGroup = function(input) {
     refreshRouteGroupOptions();
 };
 
-window.openDnsModal = function(groupItem) {
+window.parseDnsModalValue = function(value) {
+    let line = String(value || '').trim();
+    if (line.startsWith('#')) line = line.replace(/^#+\\s*/, '');
+    let type = 'udp4';
+    let payload = line;
+    const cmd = line.match(/^(server(?:-[a-z0-9]+)?)\\s+(.+)$/i);
+    if (cmd) {
+        payload = cmd[2].trim();
+        const directive = cmd[1].toLowerCase();
+        if (directive === 'server-tls') type = 'dot';
+        else if (directive === 'server-quic') type = 'doq';
+        else if (directive === 'server-https') type = 'doh';
+        else if (directive === 'server-h3') type = 'h3';
+        else if (directive === 'server-tcp') type = 'tcp';
+        else type = payload.includes(':') && !payload.startsWith('[') && !/^\\d+\\.\\d+\\.\\d+\\.\\d+/.test(payload) ? 'udp6' : 'udp4';
+    } else if (/^(?:dot|tls):\\/\\//i.test(payload)) type = 'dot';
+    else if (/^(?:doq|quic):\\/\\//i.test(payload)) type = 'doq';
+    else if (/^https:\\/\\//i.test(payload)) type = 'doh';
+    else if (/^h3:\\/\\//i.test(payload)) type = 'h3';
+    else if (/^tcp:\\/\\//i.test(payload)) type = 'tcp';
+
+    const firstSpace = payload.search(/\\s/);
+    let endpoint = firstSpace < 0 ? payload : payload.slice(0, firstSpace);
+    const options = firstSpace < 0 ? '' : payload.slice(firstSpace).trim();
+    const schemes = { dot: /^(?:dot|tls):\\/\\//i, doq: /^(?:doq|quic):\\/\\//i, doh: /^https:\\/\\//i, h3: /^h3:\\/\\//i, tcp: /^tcp:\\/\\//i };
+    if (schemes[type]) endpoint = endpoint.replace(schemes[type], '');
+
+    let address = endpoint, port = '', path = '/dns-query';
+    if (['doh','h3'].includes(type)) {
+        const pathIndex = endpoint.indexOf('/');
+        if (pathIndex >= 0) { path = endpoint.slice(pathIndex) || '/dns-query'; endpoint = endpoint.slice(0, pathIndex); }
+    }
+    if (endpoint.startsWith('[')) {
+        const close = endpoint.indexOf(']');
+        if (close >= 0) {
+            address = endpoint.slice(1, close);
+            const remainder = endpoint.slice(close + 1);
+            if (remainder.startsWith(':')) port = remainder.slice(1);
+        }
+    } else {
+        const colonCount = (endpoint.match(/:/g) || []).length;
+        if (colonCount === 1) {
+            const idx = endpoint.lastIndexOf(':');
+            if (/^\\d+$/.test(endpoint.slice(idx + 1))) { address = endpoint.slice(0, idx); port = endpoint.slice(idx + 1); }
+        }
+        if (colonCount > 1) address = endpoint;
+    }
+    if (!['doh','h3'].includes(type) && ['dot','doq','tcp'].includes(type) && !port) {
+        const defaults = { dot: '853', doq: '853', tcp: '53' };
+        // Leave default ports blank in the form; SmartDNS will use its protocol default.
+        port = '';
+    }
+    return { type, address, port, path, options };
+};
+
+window.openDnsModal = function(target, row = null) {
     const modal = document.getElementById('dns-server-modal');
     if (!modal || !window.bootstrap) return;
-    window.dnsModalTarget = groupItem;
-    window.dnsModalSuffix = groupItem?.closest('.group-item') ? '-exclude-default-group -group ' + (groupItem.closest('.group-item').querySelector('.group-name-input')?.value.trim() || '') : (groupItem?.id === 'sec-bootstrap' ? '-bootstrap-dns' : groupItem?.id === 'sec-fallback' ? '-exclude-default-group -group fallback' : '');
-    document.getElementById('dns-type').value = 'udp4';
-    document.getElementById('dns-address').value = '';
-    document.getElementById('dns-path').value = '/dns-query';
-    document.getElementById('dns-port').value = '';
+    window.dnsModalTarget = target;
+    window.dnsModalEditRow = row;
+    const title = document.getElementById('dns-server-modal-title');
+    const submit = document.getElementById('dns-modal-submit');
+    if (row) {
+        const parsed = window.parseDnsModalValue(row.querySelector('.dns-value')?.value || '');
+        document.getElementById('dns-type').value = parsed.type;
+        document.getElementById('dns-address').value = parsed.address;
+        document.getElementById('dns-port').value = parsed.port;
+        document.getElementById('dns-path').value = parsed.path || '/dns-query';
+        document.getElementById('dns-options').value = parsed.options || '';
+        if (title) title.innerHTML = '<i class="bi bi-hdd-network me-2"></i>Редактировать DNS-сервер';
+        if (submit) submit.innerHTML = '<i class="bi bi-check-lg me-1"></i>Сохранить';
+    } else {
+        document.getElementById('dns-type').value = 'udp4';
+        document.getElementById('dns-address').value = '';
+        document.getElementById('dns-path').value = '/dns-query';
+        document.getElementById('dns-port').value = '';
+        document.getElementById('dns-options').value = '';
+        if (title) title.innerHTML = '<i class="bi bi-hdd-network me-2"></i>Добавить DNS-сервер';
+        if (submit) submit.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Добавить DNS';
+    }
     updateDnsModalFields();
     bootstrap.Modal.getOrCreateInstance(modal).show();
 };
@@ -303,6 +374,7 @@ window.addDnsServerFromModal = function() {
     const address = document.getElementById('dns-address').value.trim();
     const port = document.getElementById('dns-port').value.trim();
     const path = document.getElementById('dns-path').value.trim() || '/dns-query';
+    const options = document.getElementById('dns-options').value.trim();
     if (!address) { alert('Укажите адрес DNS-сервера.'); return; }
     const host = address.includes(':') && !address.startsWith('[') ? '[' + address + ']' : address;
     let line;
@@ -312,12 +384,17 @@ window.addDnsServerFromModal = function() {
     else if (type === 'h3') line = 'server-h3 h3://' + host + (port ? ':' + port : '') + path;
     else if (type === 'tcp') line = 'server-tcp ' + host + (port ? ':' + port : '');
     else line = host + (port && port !== '53' ? ':' + port : '');
+    if (options) line += ' ' + options;
     const target = window.dnsModalTarget;
     if (!target) return;
     const list = target.classList.contains('dns-server-list') ? target : target.querySelector('.group-dns-list');
     if (!list) return;
     list.querySelector('.dns-empty')?.remove();
-    list.insertAdjacentHTML('beforeend', UI.dnsServerRow(line));
+    const editRow = window.dnsModalEditRow;
+    const html = UI.dnsServerRow(line);
+    if (editRow && editRow.isConnected) editRow.outerHTML = html;
+    else list.insertAdjacentHTML('beforeend', html);
+    window.dnsModalEditRow = null;
     markConfigDirty();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('dns-server-modal')).hide();
 };
