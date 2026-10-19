@@ -4,8 +4,8 @@ export PATH="/opt/bin:/opt/sbin:/bin:/sbin:/usr/bin:/usr/sbin"
 BASE_DIR=$(dirname "$(readlink -f "$0")")
 
 # Authenticate against the existing Entware root password hash. Never create or
-# store a second WebUI password. Entware's default BusyBox passwd uses MD5-crypt
-# on many builds; SHA-256/SHA-512 crypt are supported where OpenSSL supports them.
+# store a second WebUI password. Entware commonly stores MD5-crypt hashes and may not include OpenSSL.
+# Use BusyBox cryptpw for MD5-crypt; SHA-256/SHA-512 need OpenSSL.
 authenticate_entware_root() {
     AUTH_HEADER=${HTTP_AUTHORIZATION:-}
     case "$AUTH_HEADER" in
@@ -50,10 +50,41 @@ authenticate_entware_root() {
         *) return 1 ;;
     esac
 
-    COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | openssl passwd "$AUTH_ALGO" -salt "$AUTH_SALT" -stdin 2>/dev/null) || {
-        unset AUTH_PASSWORD
-        return 1
-    }
+    case "$AUTH_ALGO" in
+        -1)
+            # Prefer BusyBox cryptpw: Entware commonly has no OpenSSL installed.
+            if command -v cryptpw >/dev/null 2>&1; then
+                COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | cryptpw -m md5 -S "$AUTH_SALT" -P 0 2>/dev/null) || {
+                    unset AUTH_PASSWORD
+                    return 1
+                }
+            elif command -v busybox >/dev/null 2>&1; then
+                COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | busybox cryptpw -m md5 -S "$AUTH_SALT" -P 0 2>/dev/null) || {
+                    unset AUTH_PASSWORD
+                    return 1
+                }
+            elif [ -x /opt/bin/busybox ]; then
+                COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | /opt/bin/busybox cryptpw -m md5 -S "$AUTH_SALT" -P 0 2>/dev/null) || {
+                    unset AUTH_PASSWORD
+                    return 1
+                }
+            elif [ -x /bin/busybox ]; then
+                COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | /bin/busybox cryptpw -m md5 -S "$AUTH_SALT" -P 0 2>/dev/null) || {
+                    unset AUTH_PASSWORD
+                    return 1
+                }
+            else
+                unset AUTH_PASSWORD
+                return 1
+            fi
+            ;;
+        *)
+            COMPUTED_HASH=$(printf '%s' "$AUTH_PASSWORD" | openssl passwd "$AUTH_ALGO" -salt "$AUTH_SALT" -stdin 2>/dev/null) || {
+                unset AUTH_PASSWORD
+                return 1
+            }
+            ;;
+    esac
     unset AUTH_PASSWORD
     [ "$COMPUTED_HASH" = "$STORED_HASH" ]
 }
