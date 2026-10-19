@@ -107,10 +107,10 @@ const UI = {
         </div>`,
 
     routeFileRow: (path) => `
-        <div class="route-file-row d-flex align-items-center gap-2 mb-2">
+        <div class="route-file-row d-flex align-items-center gap-2">
             <i class="bi bi-file-earmark-text text-secondary"></i>
-            <input type="text" class="form-control form-control-sm route-file-path" value="${UI.escape(path)}" placeholder="/opt/etc/smartdns/domains/list.list" oninput="markConfigDirty()">
-            <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-file-row').remove(); markConfigDirty();" title="Убрать список"><i class="bi bi-x-lg"></i></button>
+            <select class="form-select form-select-sm route-file-select" data-current-path="${UI.escape(path)}" onchange="this.dataset.currentPath=this.value; markConfigDirty()"><option value="${UI.escape(path)}" selected>${UI.escape(path || 'Выберите список…')}</option></select>
+            <button type="button" class="icon-action danger" onclick="this.closest('.route-file-row').remove(); markConfigDirty();" title="Убрать список"><i class="bi bi-trash3"></i></button>
         </div>`,
     routeCard: (name, group, files) => `
         <div class="route-item border p-2 mb-2 rounded position-relative shadow-sm">
@@ -217,8 +217,9 @@ window.addRouteFileUI = function(button) {
     if (!list) return;
     list.querySelector('.route-files-empty')?.remove();
     list.insertAdjacentHTML('beforeend', UI.routeFileRow(''));
-    const inputs = list.querySelectorAll('.route-file-path');
+    const inputs = list.querySelectorAll('.route-file-select');
     inputs[inputs.length - 1]?.focus();
+    if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
     markConfigDirty();
 };
 
@@ -518,7 +519,7 @@ function gatherSectionsText() {
         routeItems.forEach(item => {
             let name = item.querySelector('.route-name').value.trim();
             let group = item.querySelector('.route-group').value.trim();
-            let files = Array.from(item.querySelectorAll('.route-file-path')).map(input => input.value.trim()).filter(Boolean).join('\n');
+            let files = Array.from(item.querySelectorAll('.route-file-select')).map(input => (input.value || input.dataset.currentPath || '').trim()).filter(Boolean).join('\n');
             
             if (name && group && files) {
                 files.split('\n').forEach(f => {
