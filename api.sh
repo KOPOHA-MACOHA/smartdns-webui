@@ -143,9 +143,31 @@ handle_api() {
             echo "${CURRENT_VERSION}|${LATEST}"
             ;;
         "do_update")
-            # Обновление требует отдельной проверки целостности; сохраняем
-            # текущее поведение до выделенного изменения механизма обновления.
-            ( sleep 2; curl -fsSL "${REPO_URL}/install.sh?t=$(date +%s)" | tr -d '\r' | sh ) >/dev/null 2>&1 &
+            # Download to a temporary file, validate it, then execute; keep a log for diagnosis.
+            (
+                UPDATE_TMP="/opt/tmp/smartdns-webui-update-$.sh"
+                UPDATE_LOG="/opt/var/log/smartdns-webui-update.log"
+                mkdir -p /opt/tmp /opt/var/log 2>/dev/null
+                echo "[$(date)] Update started" > "$UPDATE_LOG"
+                if ! curl -fsSL --connect-timeout 15 --max-time 120 "${REPO_URL}/install.sh?t=$(date +%s)" -o "$UPDATE_TMP"; then
+                    echo "[$(date)] ERROR: installer download failed" >> "$UPDATE_LOG"
+                    rm -f "$UPDATE_TMP"
+                    exit 1
+                fi
+                if [ ! -s "$UPDATE_TMP" ] || ! sh -n "$UPDATE_TMP"; then
+                    echo "[$(date)] ERROR: installer is empty or has shell syntax errors" >> "$UPDATE_LOG"
+                    rm -f "$UPDATE_TMP"
+                    exit 1
+                fi
+                if sh "$UPDATE_TMP" >> "$UPDATE_LOG" 2>&1; then
+                    echo "[$(date)] Update completed successfully" >> "$UPDATE_LOG"
+                else
+                    echo "[$(date)] ERROR: update failed" >> "$UPDATE_LOG"
+                    rm -f "$UPDATE_TMP"
+                    exit 1
+                fi
+                rm -f "$UPDATE_TMP"
+            ) >/dev/null 2>&1 &
             echo "OK"
             ;;
         *)
