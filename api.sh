@@ -79,6 +79,21 @@ restart_smartdns() {
     return 1
 }
 
+acquire_update_lock() {
+    UPDATE_LOCK="/opt/tmp/smartdns-webui-update.lock"
+    if mkdir "$UPDATE_LOCK" 2>/dev/null; then
+        return 0
+    fi
+
+    # Recover a lock left behind after a crashed/rebooted updater.
+    OLD_PID=$(cat "$UPDATE_LOCK/pid" 2>/dev/null || true)
+    if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
+        rm -rf "$UPDATE_LOCK"
+        mkdir "$UPDATE_LOCK" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
 handle_api() {
     ACTION="$1"
     TARGET="$2"
@@ -155,7 +170,7 @@ handle_api() {
                 echo "ERROR: update disabled in test mode"
             elif ! mkdir -p /opt/tmp /opt/var/log 2>/dev/null; then
                 echo "ERROR: cannot create update directories"
-            elif ! mkdir /opt/tmp/smartdns-webui-update.lock 2>/dev/null; then
+            elif ! acquire_update_lock; then
                 echo "ERROR: update already running"
             else
                 UPDATE_STATUS="/opt/tmp/smartdns-webui-update.status"
@@ -201,6 +216,8 @@ handle_api() {
                     fi
                     rm -f "$UPDATE_TMP"
                 ) </dev/null >/dev/null 2>&1 &
+                UPDATER_PID=$!
+                printf '%s\n' "$UPDATER_PID" > "$UPDATE_LOCK/pid" 2>/dev/null || true
                 echo "OK"
             fi
             ;;
