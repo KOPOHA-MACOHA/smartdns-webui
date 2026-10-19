@@ -16,7 +16,8 @@ BACKUP_FILE="$AUTH_FILE.bak.$$"
 cleanup() {
     rm -f "$TMP_FILE" "$BACKUP_FILE"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 fail() {
     echo "ERROR: $*" >&2
