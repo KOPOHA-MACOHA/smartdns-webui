@@ -3,7 +3,7 @@ let activeList = '';
 let currentSettingsMode = 'ui'; 
 let isTestMode = false;
 
-let rawEditor = null; // Глобальная переменная для редактора с подсветкой
+window.rawEditor = null;\nlet rawEditor = null; // Глобальная переменная для редактора с подсветкой
 
 function resetToHome() {
     switchTab('settings', null, true);
@@ -108,10 +108,11 @@ function switchSettingsMode(mode) {
             });
             rawEditor = CodeMirror.fromTextArea(document.getElementById('raw-config-text'), {
                 mode: "smartdns",
-                theme: "dracula",
+                theme: "default",
                 lineNumbers: true,
                 lineWrapping: true
             });
+            window.rawEditor = rawEditor;
             rawEditor.on('change', () => {
                 document.getElementById('raw-config-text').value = rawEditor.getValue();
                 markConfigDirty();
@@ -611,6 +612,7 @@ window.toggleTheme = function() {
     root.dataset.theme = next;
     try { localStorage.setItem('smartdns-ui-theme', next); } catch (_) {}
     const button = document.getElementById('theme-toggle');
+    if (window.rawEditor) window.rawEditor.refresh();
     if (button) {
         button.innerHTML = next === 'dark' ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon-stars"></i>';
         button.title = next === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему';
