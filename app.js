@@ -3,7 +3,8 @@ let activeList = '';
 let currentSettingsMode = 'ui'; 
 let isTestMode = false;
 
-window.rawEditor = null;\nlet rawEditor = null; // Глобальная переменная для редактора с подсветкой
+window.rawEditor = null;
+let rawEditor = null; // Глобальная переменная для редактора с подсветкой
 
 function resetToHome() {
     switchTab('settings', null, true);
