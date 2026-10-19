@@ -86,6 +86,12 @@ const UI = {
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
         </div>`,
 
+    routeFileRow: (path) => `
+        <div class="route-file-row d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-file-earmark-text text-secondary"></i>
+            <input type="text" class="form-control form-control-sm route-file-path" value="${UI.escape(path)}" placeholder="/opt/etc/smartdns/domains/list.list" oninput="markConfigDirty()">
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-file-row').remove(); markConfigDirty();" title="Убрать список"><i class="bi bi-x-lg"></i></button>
+        </div>`,
     routeCard: (name, group, files) => `
         <div class="route-item border p-2 mb-2 rounded position-relative shadow-sm">
             <div class="d-flex gap-2 align-items-center mb-2">
@@ -98,11 +104,14 @@ const UI = {
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
             </div>
             <div class="route-files-list">
-                <textarea class="form-control code-font bg-secondary text-light border-secondary p-2 route-files" rows="2" placeholder="Путь к файлу списка, по одному на строку" oninput="markConfigDirty()">${UI.escape(files)}</textarea>
+                ${(files || '').split('\\n').filter(f => f.trim()).map(f => UI.routeFileRow(f.replace(/^#\\s*/,''))).join('') || '<div class="route-files-empty settings-section-hint mb-2">Списки ещё не добавлены</div>'}
             </div>
-            <div class="d-flex justify-content-end mt-2">
-                <label class="small text-muted me-2 align-self-center">DNS-группа</label>
-                <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty()"></select>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
+                <button class="btn btn-sm btn-outline-primary" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить список</button>
+                <div class="d-flex align-items-center">
+                    <label class="small text-muted me-2">DNS-группа</label>
+                    <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty()"></select>
+                </div>
             </div>
         </div>`,
 
@@ -171,7 +180,7 @@ const UI = {
 
 window.addNewGroupUI = () => {
     const cont = document.getElementById('dynamic-groups-container');
-    if (cont) { document.getElementById('no-groups-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.groupCard('', '')); markConfigDirty(); }
+    if (cont) { document.getElementById('no-groups-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.groupCard('', '')); refreshRouteGroupOptions(); markConfigDirty(); }
 };
 window.addNewAddressUI = () => {
     const cont = document.getElementById('dynamic-addresses-container');
@@ -179,11 +188,21 @@ window.addNewAddressUI = () => {
 };
 window.addNewRouteUI = () => {
     const cont = document.getElementById('dynamic-routes-container');
-    if (cont) { document.getElementById('no-route-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.routeCard('', '', '')); markConfigDirty(); }
+    if (cont) { document.getElementById('no-route-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.routeCard('', '', '')); refreshRouteGroupOptions(); markConfigDirty(); }
 };
 
 
-window.toggleInlineEdit = function(button) {
+
+window.addRouteFileUI = function(button) {
+    const list = button.closest('.route-item')?.querySelector('.route-files-list');
+    if (!list) return;
+    list.querySelector('.route-files-empty')?.remove();
+    list.insertAdjacentHTML('beforeend', UI.routeFileRow(''));
+    const inputs = list.querySelectorAll('.route-file-path');
+    inputs[inputs.length - 1]?.focus();
+    markConfigDirty();
+};
+\nwindow.toggleInlineEdit = function(button) {
     const wrapper = button.closest('.editable-name');
     if (!wrapper) return;
     const input = wrapper.querySelector('input');
@@ -483,7 +502,7 @@ function gatherSectionsText() {
         routeItems.forEach(item => {
             let name = item.querySelector('.route-name').value.trim();
             let group = item.querySelector('.route-group').value.trim();
-            let files = item.querySelector('.route-files').value.trim();
+            let files = Array.from(item.querySelectorAll('.route-file-path')).map(input => input.value.trim()).filter(Boolean).join('\\n');
             
             if (name && group && files) {
                 files.split('\n').forEach(f => {
