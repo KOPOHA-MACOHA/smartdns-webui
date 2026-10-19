@@ -208,7 +208,8 @@ window.addRouteFileUI = function(button) {
     inputs[inputs.length - 1]?.focus();
     markConfigDirty();
 };
-\nwindow.toggleInlineEdit = function(button) {
+
+window.toggleInlineEdit = function(button) {
     const wrapper = button.closest('.editable-name');
     if (!wrapper) return;
     const input = wrapper.querySelector('input');
