@@ -58,19 +58,33 @@ window.cleanDns = function(line, suffixesToRemove) {
 const UI = {
     escape: (str) => str ? str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '',
     
-    card: (title, id, linesArr, notice = '') => {
-        const val = linesArr.join('\n');
-        const rows = Math.max(3, Math.min(15, linesArr.length));
-        return `
-        <div class="card bg-dark border-secondary mb-3 shadow-sm">
-            <div class="card-header border-secondary section-header py-2 d-flex justify-content-between align-items-center"><span>${title}</span>${['bootstrap','upstream','fallback'].includes(id) ? '<button type="button" class="btn btn-sm btn-outline-primary" onclick="openDnsModal(document.getElementById(\'sec-' + id + '\'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>' : ''}</div>
-            <div class="card-body p-0">
-                ${notice ? `<div class="p-2 text-muted small border-bottom border-secondary" style="font-size:0.75rem;">${notice}</div>` : ''}
-                <textarea id="sec-${id}" class="form-control code-font border-0 rounded-0 p-2" rows="${rows}" oninput="markConfigDirty()">${UI.escape(val)}</textarea>
-            </div>
-        </div>`;
+    dnsServerRow: (value) => {
+        const raw = (value || '').trim();
+        const displayValue = window.cleanDns ? window.cleanDns(raw, ['-bootstrap-dns', '-exclude-default-group', /\s+-group\s+[^\s]+/g]) : raw;
+        let protocol = 'DNS', endpoint = displayValue;
+        if (/^server-https\s+/i.test(displayValue)) { protocol = 'DoH'; endpoint = displayValue.replace(/^server-https\s+/i, ''); }
+        else if (/^server-h3\s+/i.test(displayValue)) { protocol = 'HTTP/3'; endpoint = displayValue.replace(/^server-h3\s+/i, ''); }
+        else if (/^server-tls\s+/i.test(displayValue) || /^dot:\/\//i.test(displayValue)) { protocol = 'DoT'; endpoint = displayValue.replace(/^server-tls\s+/i, '').replace(/^dot:\/\//i, ''); }
+        else if (/^server-quic\s+/i.test(displayValue) || /^doq:\/\//i.test(displayValue)) { protocol = 'DoQ'; endpoint = displayValue.replace(/^server-quic\s+/i, '').replace(/^doq:\/\//i, ''); }
+        else if (/^server-tcp\s+/i.test(displayValue) || /^tcp:\/\//i.test(displayValue)) { protocol = 'TCP'; endpoint = displayValue.replace(/^server-tcp\s+/i, '').replace(/^tcp:\/\//i, ''); }
+        else if (/^https:\/\//i.test(displayValue)) protocol = 'DoH';
+        else if (/^h3:\/\//i.test(displayValue)) protocol = 'HTTP/3';
+        else if (/^#/i.test(raw)) protocol = 'Отключён';
+        return '<div class="dns-server-row d-flex align-items-center gap-3">' +
+            '<span class="dns-protocol">' + UI.escape(protocol) + '</span>' +
+            '<span class="dns-endpoint flex-grow-1 text-truncate" title="' + UI.escape(endpoint) + '">' + UI.escape(endpoint) + '</span>' +
+            '<input type="hidden" class="dns-value" value="' + UI.escape(displayValue) + '">' +
+            '<button type="button" class="icon-action danger" onclick="this.closest(\'.dns-server-row\').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button></div>';
     },
-
+    card: (title, id, linesArr, notice = '') => {
+        const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
+        const body = dnsSection
+            ? '<div id="sec-' + id + '" class="dns-server-list">' + (linesArr.map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">DNS-серверы не добавлены</div>') + '</div>'
+            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\n')) + '</textarea>';
+        return '<div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>' + title + '</span>' +
+            (dnsSection ? '<button type="button" class="btn btn-sm btn-primary" onclick="openDnsModal(document.getElementById(\'sec-' + id + '\'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>' : '') +
+            '</div><div class="card-body p-0">' + (notice ? '<div class="p-2 text-muted small border-bottom">' + notice + '</div>' : '') + body + '</div></div>';
+    },
     logCard: (level) => `
         <div class="card bg-dark border-secondary mb-3 shadow-sm">
             <div class="card-header border-secondary section-header py-2"><span>Логирование</span></div>
@@ -132,12 +146,11 @@ const UI = {
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
-            <div class="group-dns-list">
-                <textarea class="form-control code-font bg-secondary text-light border-secondary p-2 group-content-input" rows="2" placeholder="DNS-серверы группы" oninput="markConfigDirty()">${UI.escape(content)}</textarea>
+            <div class="group-dns-list dns-server-list">
+                ${(content || '').split(/\r?\n/).filter(line => line.trim()).map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">В этой группе пока нет DNS-серверов</div>'}
             </div>
-            <div class="d-flex justify-content-between align-items-center mt-2">
-                <span class="settings-section-hint">DNS-серверы этой группы</span>
-                <button class="btn btn-sm btn-outline-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
+            <div class="d-flex justify-content-end mt-2">
+                <button class="btn btn-sm btn-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
             </div>
         </div>`,
 
@@ -261,7 +274,8 @@ window.renameDnsGroup = function(input) {
 window.openDnsModal = function(groupItem) {
     const modal = document.getElementById('dns-server-modal');
     if (!modal || !window.bootstrap) return;
-    window.dnsModalTextareaTarget = groupItem?.matches?.('textarea') ? groupItem : groupItem?.querySelector('.group-content-input');
+    window.dnsModalTarget = groupItem;
+    window.dnsModalSuffix = groupItem?.closest('.group-item') ? '-exclude-default-group -group ' + (groupItem.closest('.group-item').querySelector('.group-name-input')?.value.trim() || '') : (groupItem?.id === 'sec-bootstrap' ? '-bootstrap-dns' : groupItem?.id === 'sec-fallback' ? '-exclude-default-group -group fallback' : '');
     document.getElementById('dns-type').value = 'udp4';
     document.getElementById('dns-address').value = '';
     document.getElementById('dns-path').value = '/dns-query';
@@ -292,10 +306,13 @@ window.addDnsServerFromModal = function() {
     else if (type === 'h3') line = 'server-h3 h3://' + host + (port ? ':' + port : '') + path;
     else if (type === 'tcp') line = 'server-tcp ' + host + (port ? ':' + port : '');
     else line = host + (port && port !== '53' ? ':' + port : '');
-    const textarea = window.dnsModalTextareaTarget;
-    if (!textarea) return;
-    textarea.value = textarea.value.trim() ? textarea.value.trim() + '\n' + line : line;
-    textarea.dispatchEvent(new Event('input', {bubbles:true}));
+    const target = window.dnsModalTarget;
+    if (!target) return;
+    const list = target.classList.contains('dns-server-list') ? target : target.querySelector('.group-dns-list');
+    if (!list) return;
+    list.querySelector('.dns-empty')?.remove();
+    list.insertAdjacentHTML('beforeend', UI.dnsServerRow(line));
+    markConfigDirty();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('dns-server-modal')).hide();
 };
 
@@ -470,35 +487,21 @@ function gatherSectionsText() {
     if (coreOthers.trim()) text += coreOthers.trim() + '\n';
     text += '\n';
 
-    const bsEl = document.getElementById('sec-bootstrap');
-    if (bsEl && bsEl.value.trim()) {
-        text += `##########\n# Bootstrap DNS #\n##########\n`;
-        bsEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '-bootstrap-dns') + '\n'; });
-        text += '\n';
-    }
-
-    const upEl = document.getElementById('sec-upstream');
-    if (upEl && upEl.value.trim()) {
-        text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`;
-        upEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '') + '\n'; });
-        text += '\n';
-    }
-
-    const fbEl = document.getElementById('sec-fallback');
-    if (fbEl && fbEl.value.trim()) {
-        text += `##########\n# Резервные DNS (Fallback) #\n##########\n`;
-        fbEl.value.trim().split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), '-exclude-default-group -group fallback') + '\n'; });
-        text += '\n';
-    }
-
+    const collectDnsRows = id => Array.from(document.querySelectorAll('#sec-' + id + ' .dns-value')).map(input => input.value.trim()).filter(Boolean);
+    const bsRows = collectDnsRows('bootstrap');
+    if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDns(line, '-bootstrap-dns') + '\n'; }); text += '\n'; }
+    const upRows = collectDnsRows('upstream');
+    if (upRows.length) { text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`; upRows.forEach(line => { text += formatDns(line, '') + '\n'; }); text += '\n'; }
+    const fbRows = collectDnsRows('fallback');
+    if (fbRows.length) { text += `##########\n# Резервные DNS (Fallback) #\n##########\n`; fbRows.forEach(line => { text += formatDns(line, '-exclude-default-group -group fallback') + '\n'; }); text += '\n'; }
     const grpItems = document.querySelectorAll('.group-item');
     if (grpItems.length > 0) {
         text += `##########\n# Групповые записи #\n##########\n`;
         grpItems.forEach(item => {
             let name = item.querySelector('.group-name-input').value.trim();
-            let content = item.querySelector('.group-content-input').value.trim();
-            if (name && content) {
-                content.split('\n').forEach(l => { if (l.trim()) text += formatDns(l.trim(), `-exclude-default-group -group ${name}`) + '\n'; });
+            const dnsRows = Array.from(item.querySelectorAll('.dns-value')).map(input => input.value.trim()).filter(Boolean);
+            if (name && dnsRows.length) {
+                dnsRows.forEach(line => { text += formatDns(line, `-exclude-default-group -group ${name}`) + '\n'; });
             }
         });
         text += '\n';
