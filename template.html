@@ -176,9 +176,10 @@
         .settings-subtab-panel .dns-server-row .icon-action:nth-last-child(2) { grid-column:2; }
         .settings-subtab-panel .dns-server-row .icon-action:last-child { grid-column:3; }
         .settings-subtab-panel .group-item, .settings-subtab-panel .route-item { min-width:0; width:100%; }
-        .settings-subtab-panel .address-item { display:grid; grid-template-columns:minmax(0,1fr) 40px; gap:7px; }
-        .settings-subtab-panel .address-item .addr-domain, .settings-subtab-panel .address-item .addr-ip { grid-column:1; width:100%; margin:0; min-height:46px; }
-        .settings-subtab-panel .address-item .btn { grid-column:2; grid-row:1 / span 2; width:40px; height:40px; }
+        .settings-subtab-panel .address-item { display:grid; grid-template-columns:32px minmax(0,1fr) 40px; gap:7px; }
+        .settings-subtab-panel .address-item .addr-domain, .settings-subtab-panel .address-item .addr-ip { grid-column:2; width:100%; margin:0; min-height:46px; }
+        .settings-subtab-panel .address-item .btn { grid-column:3; grid-row:1 / span 2; width:40px; height:40px; }
+            .settings-subtab-panel .address-item .dns-enabled-control { grid-column:1; grid-row:1 / span 2; width:32px; min-height:40px; }
         .settings-subtab-panel .route-file-row { display:grid; grid-template-columns:22px minmax(0,1fr) 40px; gap:6px; }
         /* Mobile-first settings layout: navigation and controls are designed for touch. */
         .settings-subnav { display:flex; gap:8px; overflow-x:auto; padding:4px 2px 12px; margin:0 0 12px; border-bottom:1px solid var(--line); scrollbar-width:thin; }
@@ -279,6 +280,7 @@
             .settings-subtab-panel .address-item .addr-domain { width:auto !important; margin-right:.5rem !important; }
             .settings-subtab-panel .address-item .addr-ip { width:50% !important; margin-right:.5rem !important; }
             .settings-subtab-panel .address-item .btn { width:auto; height:auto; grid-column:auto; grid-row:auto; }
+            .settings-subtab-panel .address-item .dns-enabled-control { grid-column:auto; grid-row:auto; flex-basis:28px; width:28px; min-height:32px; }
             .settings-subtab-panel .route-file-row { display:flex; }
         }
     </style>
@@ -428,7 +430,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=20"></script>
+<script src="parser.js?v=21"></script>
 <script src="validator.js?v=1"></script>
 <script src="version.js?v=1"></script>
 <script src="app.js?v=15"></script>
