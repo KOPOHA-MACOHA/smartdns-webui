@@ -73,7 +73,7 @@ const UI = {
         const protocol = isComment ? 'Отключён' : (labels[parts.type] || 'DNS');
         return `<div class="dns-server-row d-flex align-items-center gap-3">
             <span class="dns-protocol">${UI.escape(protocol)}</span>
-            <span class="dns-endpoint flex-grow-1 text-truncate" title="${UI.escape(endpoint)}">${UI.escape(endpoint)}</span>
+            <span class="dns-endpoint flex-grow-1" title="${UI.escape(endpoint)}">${UI.escape(endpoint)}</span>
             <input type="hidden" class="dns-value" value="${UI.escape(displayValue)}">
             <button type="button" class="icon-action" onclick="openDnsModal(this.closest('.dns-server-list'), this.closest('.dns-server-row'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button type="button" class="icon-action danger" onclick="this.closest('.dns-server-row').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button>
@@ -140,8 +140,9 @@ const UI = {
 
     groupCard: (name, content) => `
         <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm">
-            <div class="d-flex gap-2 align-items-center mb-2">
+            <div class="group-heading d-flex gap-2 align-items-center mb-2">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
+                <button type="button" class="group-collapse-toggle btn btn-sm btn-link text-reset p-1" onclick="toggleDnsGroup(this)" aria-expanded="true" title="Свернуть DNS-группу" aria-label="Свернуть DNS-группу"><i class="bi bi-chevron-down"></i></button>
                 <div class="editable-name group-editable-name flex-grow-1">
                     <span class="group-name-display fw-semibold">${UI.escape(name || 'Новая DNS-группа')}</span>
                     <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
@@ -149,14 +150,15 @@ const UI = {
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
-            <div class="group-dns-list dns-server-list">
-                ${(content || '').split(/\r?\n/).filter(line => line.trim()).map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">В этой группе пока нет DNS-серверов</div>'}
-            </div>
-            <div class="d-flex justify-content-end mt-2">
-                <button class="btn btn-sm btn-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
+            <div class="group-body">
+                <div class="group-dns-list dns-server-list">
+                    ${(content || '').split(/\\r?\\n/).filter(line => line.trim()).map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">В этой группе пока нет DNS-серверов</div>'}
+                </div>
+                <div class="d-flex justify-content-end mt-2">
+                    <button class="btn btn-sm btn-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
+                </div>
             </div>
         </div>`,
-
     coreCard: (data, rawLines) => `
         <div class="card bg-dark border-secondary mb-3 shadow-sm">
             <div class="card-header border-secondary section-header py-2"><span>Основные параметры (Core)</span></div>
@@ -198,6 +200,20 @@ const UI = {
                 <input type="hidden" id="sec-core-others" value="${UI.escape(rawLines.join('\n'))}">
             </div>
         </div>`
+};
+
+window.toggleDnsGroup = function(button) {
+    const item = button.closest('.group-item');
+    if (!item) return;
+    const collapsed = item.classList.toggle('is-collapsed');
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.setAttribute('aria-label', collapsed ? 'Развернуть DNS-группу' : 'Свернуть DNS-группу');
+    button.title = collapsed ? 'Развернуть DNS-группу' : 'Свернуть DNS-группу';
+    const icon = button.querySelector('i');
+    if (icon) {
+        icon.classList.toggle('bi-chevron-down', !collapsed);
+        icon.classList.toggle('bi-chevron-right', collapsed);
+    }
 };
 
 window.addNewGroupUI = () => {
