@@ -103,10 +103,13 @@ const UI = {
             </div>
         </div>`,
 
-    addressRow: (domain, ip) => `
-        <div class="address-item d-flex mb-2 align-items-center">
+    addressRow: (domain, ip, enabled = true) => `
+        <div class="address-item d-flex mb-2 align-items-center${enabled ? '' : ' is-disabled'}">
+            <label class="dns-enabled-control" title="Включить или отключить локальный адрес">
+                <input type="checkbox" class="addr-enabled" ${enabled ? 'checked' : ''} onchange="toggleAddressRecord(this)" aria-label="Включить локальный адрес">
+            </label>
             <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен (или # домен)" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP" value="${UI.escape(ip)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
         </div>`,
@@ -234,6 +237,13 @@ window.toggleDnsRecord = function(checkbox) {
     if (!row) return;
     row.classList.toggle('is-disabled', !checkbox.checked);
     checkbox.title = checkbox.checked ? 'DNS-запись включена' : 'DNS-запись отключена';
+    markConfigDirty();
+};
+window.toggleAddressRecord = function(checkbox) {
+    const row = checkbox.closest('.address-item');
+    if (!row) return;
+    row.classList.toggle('is-disabled', !checkbox.checked);
+    checkbox.title = checkbox.checked ? 'Локальный адрес включён' : 'Локальный адрес отключён';
     markConfigDirty();
 };
 
@@ -516,7 +526,7 @@ function parseConfigToSections(content) {
             else other.push(originalTrimmed);
         } else if (cmd === 'address') {
             let m = activeLine.match(/^address\s+\/([^\/]+)\/(.+)$/);
-            if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2].replace(/,/g, '') });
+            if (m) addresses.push({ domain: m[1], ip: m[2].replace(/,/g, ''), enabled: !isComment });
             else other.push(originalTrimmed);
         } else if (cmd === 'domain-set') {
             let m = activeLine.match(/-name\s+([\w.-]+)\s+-file\s+(.+)$/);
@@ -574,7 +584,7 @@ function parseConfigToSections(content) {
 
     let groupsHtml = Object.keys(groupsObj).map(g => UI.groupCard(g, groupsObj[g].join('\n'))).join('');
     let routesHtml = Object.keys(routesObj).map(r => UI.routeCard(r, routesObj[r].group, routesObj[r].files.join('\n'))).join('');
-    let addrHtml = addresses.map(a => UI.addressRow(a.domain, a.ip)).join('');
+    let addrHtml = addresses.map(a => UI.addressRow(a.domain, a.ip, a.enabled)).join('');
 
     return `
     <div class="row">
@@ -697,11 +707,8 @@ function gatherSectionsText() {
         addrItems.forEach(item => {
             let domain = item.querySelector('.addr-domain').value.trim().replace(/,/g, '');
             let ip = item.querySelector('.addr-ip').value.trim().replace(/,/g, '');
-            if (domain && ip) {
-                let isComment = domain.startsWith('#');
-                if (isComment) domain = domain.replace(/^#+\s*/, '');
-                text += (isComment ? '#' : '') + `address /${domain}/${ip}\n`;
-            }
+            const enabled = item.querySelector('.addr-enabled')?.checked !== false;
+            if (domain && ip) text += (enabled ? '' : '# ') + `address /${domain}/${ip}\n`;
         });
         text += '\n';
     }
