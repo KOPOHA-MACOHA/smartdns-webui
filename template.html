@@ -82,6 +82,7 @@
         .dns-enabled-control { display:inline-flex; align-items:center; justify-content:center; flex:0 0 28px; width:28px; min-height:32px; margin:0; cursor:pointer; }
         .dns-enabled { width:18px; height:18px; margin:0; accent-color:var(--accent); cursor:pointer; }
         .dns-server-row.is-disabled .dns-endpoint { color:var(--muted); }
+        .address-item.is-disabled .addr-domain, .address-item.is-disabled .addr-ip { opacity:.58; }
         .dns-server-row.is-disabled .dns-protocol { opacity:.62; }
         .dns-protocol { display: inline-flex; justify-content: center; min-width: 70px; padding: 4px 8px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .02em; }
         .dns-endpoint { color: var(--text); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -248,10 +249,11 @@
             .settings-subtab-panel .route-item .route-files-list { min-width:0; }
             .settings-subtab-panel .route-file-row { display:grid !important; grid-template-columns:22px minmax(0,1fr) 40px; gap:6px !important; }
             .settings-subtab-panel .route-group { width:100% !important; max-width:none !important; }
-            .settings-subtab-panel .address-item { display:grid !important; grid-template-columns:minmax(0,1fr) 40px; gap:7px !important; }
+            .settings-subtab-panel .address-item { display:grid !important; grid-template-columns:32px minmax(0,1fr) 40px; gap:7px !important; }
             .settings-subtab-panel .address-item .drag-handle { display:none; }
-            .settings-subtab-panel .address-item .addr-domain, .settings-subtab-panel .address-item .addr-ip { grid-column:1; width:100% !important; margin:0 !important; min-height:46px; }
-            .settings-subtab-panel .address-item .btn { grid-column:2; grid-row:1 / span 2; width:40px; height:40px; }
+            .settings-subtab-panel .address-item .addr-domain, .settings-subtab-panel .address-item .addr-ip { grid-column:2; width:100% !important; margin:0 !important; min-height:46px; }
+            .settings-subtab-panel .address-item .btn { grid-column:3; grid-row:1 / span 2; width:40px; height:40px; }
+            .settings-subtab-panel .address-item .dns-enabled-control { grid-column:1; grid-row:1 / span 2; width:32px; min-height:40px; }
             .settings-subtab-panel .btn { min-height:42px; }
             .settings-subtab-panel .btn-sm { min-height:40px; padding:8px 10px; }
             .settings-subtab-panel .card-header .btn { flex:0 0 auto; }
