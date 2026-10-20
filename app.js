@@ -33,7 +33,7 @@ async function apiCall(action, target = null, body = null) {
             console.error('API вернуло HTML вместо данных! Проверьте index.cgi');
             return action.startsWith('get_') ? '' : false;
         }
-        return action.startsWith('get_') ? text : (text.trim() === 'OK');
+        return action.startsWith('get_') ? text : (action === 'restart_service' ? text.trim() : (text.trim() === 'OK'));
     } catch (e) {
         console.error("API Error:", e);
         return action.startsWith('get_') ? '' : false;
@@ -415,8 +415,11 @@ async function restartService() {
         if (!saved) return;
     }
     const restarted = await apiCall('restart_service');
-    if (!restarted) {
-        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.');
+    if (restarted !== 'OK') {
+        const details = typeof restarted === 'string' && restarted
+            ? '\n\nОтвет сервера: ' + restarted.slice(0, 500)
+            : '';
+        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.' + details);
         return;
     }
     alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
