@@ -409,20 +409,37 @@ async function loadConfig() {
 }
 
 async function restartService() {
-    const btn = document.getElementById('global-save-btn');
-    if (!btn.disabled) {
+    const btn = document.getElementById('restart-service-btn');
+    if (btn && btn.disabled) return;
+
+    const saveBtn = document.getElementById('global-save-btn');
+    if (saveBtn && !saveBtn.disabled) {
         const saved = await globalSave();
         if (!saved) return;
     }
-    const restarted = await apiCall('restart_service');
-    if (restarted !== 'OK') {
-        const details = typeof restarted === 'string' && restarted
-            ? '\n\nОтвет сервера: ' + restarted.slice(0, 500)
-            : '';
-        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.' + details);
-        return;
+
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Проверка...';
     }
-    alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
+
+    try {
+        const restarted = await apiCall('restart_service');
+        if (restarted !== 'OK') {
+            const details = typeof restarted === 'string' && restarted
+                ? '\n\nОтвет сервера: ' + restarted.slice(0, 500)
+                : '';
+            alert('Не удалось подтвердить, что SmartDNS запущен. Проверьте журнал службы.' + details);
+            return;
+        }
+        alert('SmartDNS перезапущен. Сервер подтвердил, что процесс SmartDNS работает.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    }
 }
 
 async function loadLists() {
