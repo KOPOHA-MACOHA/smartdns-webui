@@ -161,6 +161,21 @@
             .modal-content { max-height: calc(100dvh - 16px); overflow-y: auto; }
         }
     
+        /* Mobile-first baseline: single-column fields and touch-sized controls. */
+        .settings-subtab-panel .row.mb-3.align-items-center { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-left:0; margin-right:0; }
+        .settings-subtab-panel .row.mb-3.align-items-center > [class*="col-"] { width:100%; padding:0; }
+        .settings-subtab-panel .form-control, .settings-subtab-panel .form-select { width:100%; min-height:46px; font-size:16px; }
+        .settings-subtab-panel .dns-server-row { display:grid; grid-template-columns:minmax(0,1fr) 40px 40px; grid-template-rows:auto auto; align-items:center; gap:5px 7px; padding:12px 0; min-height:0; }
+        .settings-subtab-panel .dns-protocol { grid-column:1; grid-row:1; justify-self:start; }
+        .settings-subtab-panel .dns-endpoint { grid-column:1 / -1; grid-row:2; width:100%; min-width:0; overflow-wrap:anywhere; word-break:normal; line-height:1.5; }
+        .settings-subtab-panel .dns-server-row .icon-action { grid-row:1; width:40px; height:40px; flex-basis:40px; border:1px solid var(--line); background:var(--surface-muted); }
+        .settings-subtab-panel .dns-server-row .icon-action:nth-last-child(2) { grid-column:2; }
+        .settings-subtab-panel .dns-server-row .icon-action:last-child { grid-column:3; }
+        .settings-subtab-panel .group-item, .settings-subtab-panel .route-item { min-width:0; width:100%; }
+        .settings-subtab-panel .address-item { display:grid; grid-template-columns:minmax(0,1fr) 40px; gap:7px; }
+        .settings-subtab-panel .address-item .addr-domain, .settings-subtab-panel .address-item .addr-ip { grid-column:1; width:100%; margin:0; min-height:46px; }
+        .settings-subtab-panel .address-item .btn { grid-column:2; grid-row:1 / span 2; width:40px; height:40px; }
+        .settings-subtab-panel .route-file-row { display:grid; grid-template-columns:22px minmax(0,1fr) 40px; gap:6px; }
         /* Mobile-first settings layout: navigation and controls are designed for touch. */
         .settings-subnav { display:flex; gap:8px; overflow-x:auto; padding:4px 2px 12px; margin:0 0 12px; border-bottom:1px solid var(--line); scrollbar-width:thin; }
         .settings-subnav .nav-link { flex:0 0 auto; border:1px solid var(--line); border-radius:10px; padding:10px 14px; color:var(--muted); background:var(--surface); min-height:42px; font-weight:600; }
@@ -245,6 +260,20 @@
             .modal-footer .btn { min-height:44px; }
         }
 
+            @media (min-width: 768px) {
+            .settings-subtab-panel .row.mb-3.align-items-center { grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; }
+            .settings-subtab-panel .row.mb-3.align-items-center > [class*="col-"] { width:auto; padding-left:calc(var(--bs-gutter-x) * .5); padding-right:calc(var(--bs-gutter-x) * .5); }
+            .settings-subtab-panel .form-control, .settings-subtab-panel .form-select { min-height:40px; font-size:14px; }
+            .settings-subtab-panel .dns-server-row { display:flex !important; grid-template-columns:none; grid-template-rows:none; gap:12px !important; align-items:center; padding:10px 2px; }
+            .settings-subtab-panel .dns-protocol { grid-column:auto; grid-row:auto; }
+            .settings-subtab-panel .dns-endpoint { grid-column:auto; grid-row:auto; width:auto; font-size:13px; }
+            .settings-subtab-panel .dns-server-row .icon-action { grid-column:auto !important; grid-row:auto; width:32px; height:32px; flex-basis:32px; border-color:transparent; background:transparent; }
+            .settings-subtab-panel .address-item { display:flex; gap:0; }
+            .settings-subtab-panel .address-item .addr-domain { width:auto !important; margin-right:.5rem !important; }
+            .settings-subtab-panel .address-item .addr-ip { width:50% !important; margin-right:.5rem !important; }
+            .settings-subtab-panel .address-item .btn { width:auto; height:auto; grid-column:auto; grid-row:auto; }
+            .settings-subtab-panel .route-file-row { display:flex; }
+        }
     </style>
 </head>
 <body>
