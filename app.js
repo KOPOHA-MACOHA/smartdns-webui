@@ -421,22 +421,27 @@ async function restartService() {
     const originalHtml = btn ? btn.innerHTML : '';
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Проверка...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Перезапуск...';
+        btn.setAttribute('aria-busy', 'true');
     }
 
     try {
-        const restarted = await apiCall('restart_service');
-        if (restarted !== 'OK') {
-            const details = typeof restarted === 'string' && restarted
-                ? '\n\nОтвет сервера: ' + restarted.slice(0, 500)
-                : '';
-            alert('Не удалось подтвердить, что SmartDNS запущен. Проверьте журнал службы.' + details);
+        const result = await apiCall('restart_service');
+        if (result !== 'OK') {
+            const details = typeof result === 'string' && result
+                ? '\n\n' + result.slice(0, 500)
+                : '\n\nНе удалось получить ответ от WebUI.';
+            alert('Перезапуск SmartDNS НЕ подтверждён.' + details);
             return;
         }
-        alert('SmartDNS перезапущен. Сервер подтвердил, что процесс SmartDNS работает.');
+        alert('SmartDNS успешно перезапущен. Команда завершилась без ошибки, а процесс службы обнаружен после перезапуска.');
+    } catch (e) {
+        console.error('SmartDNS restart failed:', e);
+        alert('Не удалось проверить результат перезапуска SmartDNS. Обнови страницу и проверь журнал службы.');
     } finally {
         if (btn) {
             btn.disabled = false;
+            btn.removeAttribute('aria-busy');
             btn.innerHTML = originalHtml;
         }
     }
