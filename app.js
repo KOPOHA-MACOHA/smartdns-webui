@@ -79,6 +79,58 @@ document.addEventListener('input', (e) => {
     }
 });
 
+// Reshape parser output into three focused settings tabs without changing field IDs.
+function switchConfigSubtab(id, clicked) {
+    const root = document.getElementById('config-sections');
+    if (!root) return;
+    root.querySelectorAll('.settings-subtab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'settings-subtab-' + id));
+    root.querySelectorAll('.settings-subnav .nav-link').forEach(link => link.classList.toggle('active', link === clicked || link.dataset.subtab === id));
+    try { localStorage.setItem('smartdns-ui-active-subtab', id); } catch (_) {}
+}
+window.switchConfigSubtab = switchConfigSubtab;
+
+function organizeConfigSections() {
+    const root = document.getElementById('config-sections');
+    const row = root?.querySelector(':scope > .row');
+    if (!root || !row) return;
+    const cols = Array.from(row.children).filter(el => el.classList.contains('col-md-6'));
+    if (!cols.length) return;
+    const cards = cols.flatMap(col => Array.from(col.children).filter(el => el.classList.contains('card')));
+    const nav = document.createElement('div');
+    nav.className = 'settings-subnav nav nav-pills';
+    nav.setAttribute('role', 'tablist');
+    nav.setAttribute('aria-label', 'Разделы настроек');
+    nav.innerHTML = [
+        ['core','Основное','bi-sliders'],
+        ['groups','Группы DNS','bi-diagram-3'],
+        ['routing','Маршрутизация','bi-signpost-split']
+    ].map(([id,label,icon]) => '<button type="button" class="nav-link" role="tab" data-subtab="' + id + '" onclick="switchConfigSubtab(\'' + id + '\', this)"><i class="bi ' + icon + ' me-1"></i>' + label + '</button>').join('');
+    const panels = {};
+    [['core','Основное'],['groups','Группы DNS'],['routing','Маршрутизация']].forEach(([id,label]) => {
+        const panel = document.createElement('section');
+        panel.id = 'settings-subtab-' + id;
+        panel.className = 'settings-subtab-panel';
+        panel.setAttribute('role','tabpanel');
+        panel.setAttribute('aria-label',label);
+        panels[id] = panel;
+    });
+    cards.forEach(card => {
+        let target = 'routing';
+        if (card.querySelector('#core-bind, #sec-bootstrap, #sec-upstream, #sec-fallback, #sec-logging-select')) target = 'core';
+        else if (card.querySelector('#dynamic-groups-container')) target = 'groups';
+        panels[target].appendChild(card);
+    });
+    row.remove();
+    root.replaceChildren(nav, panels.core, panels.groups, panels.routing);
+    let active = 'core';
+    try {
+        const saved = localStorage.getItem('smartdns-ui-active-subtab');
+        if (['core','groups','routing'].includes(saved)) active = saved;
+    } catch (_) {}
+    switchConfigSubtab(active, nav.querySelector('[data-subtab="' + active + '"]'));
+    if (typeof window.applyDnsGroupCollapseState === 'function') window.applyDnsGroupCollapseState();
+}
+
 function switchSettingsMode(mode) {
     if (currentSettingsMode === mode) return;
     
@@ -126,6 +178,7 @@ function switchSettingsMode(mode) {
     } else {
         const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
         document.getElementById('config-sections').innerHTML = parseConfigToSections(rawContent);
+        organizeConfigSections();
         if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
         if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
         
@@ -337,6 +390,7 @@ async function globalSave() {
 async function loadConfig() {
     const content = await apiCall('get_config');
     document.getElementById('config-sections').innerHTML = parseConfigToSections(content);
+    organizeConfigSections();
     if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
     if (typeof refreshRouteFileOptions === 'function') await refreshRouteFileOptions();
     
