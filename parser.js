@@ -139,7 +139,7 @@ const UI = {
         </div>`,
 
     groupCard: (name, content) => `
-        <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm">
+        <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm" data-group-name="${UI.escape(name)}">
             <div class="group-heading d-flex gap-2 align-items-center mb-2">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <button type="button" class="group-collapse-toggle btn btn-sm btn-link text-reset p-1" onclick="toggleDnsGroup(this)" aria-expanded="true" title="Свернуть DNS-группу" aria-label="Свернуть DNS-группу"><i class="bi bi-chevron-down"></i></button>
@@ -202,10 +202,41 @@ const UI = {
         </div>`
 };
 
+window.getCollapsedDnsGroups = function() {
+    try { return JSON.parse(localStorage.getItem('smartdns-ui-collapsed-groups') || '{}') || {}; }
+    catch (_) { return {}; }
+};
+window.saveCollapsedDnsGroups = function(state) {
+    try { localStorage.setItem('smartdns-ui-collapsed-groups', JSON.stringify(state)); } catch (_) {}
+};
+window.applyDnsGroupCollapseState = function() {
+    const state = window.getCollapsedDnsGroups();
+    document.querySelectorAll('.group-item').forEach(item => {
+        const name = item.dataset.groupName || item.querySelector('.group-name-input')?.value || '';
+        const collapsed = !!(name && state[name]);
+        item.classList.toggle('is-collapsed', collapsed);
+        const button = item.querySelector('.group-collapse-toggle');
+        if (!button) return;
+        button.setAttribute('aria-expanded', String(!collapsed));
+        button.setAttribute('aria-label', collapsed ? 'Развернуть DNS-группу' : 'Свернуть DNS-группу');
+        button.title = collapsed ? 'Развернуть DNS-группу' : 'Свернуть DNS-группу';
+        const icon = button.querySelector('i');
+        if (icon) {
+            icon.classList.toggle('bi-chevron-down', !collapsed);
+            icon.classList.toggle('bi-chevron-right', collapsed);
+        }
+    });
+};
 window.toggleDnsGroup = function(button) {
     const item = button.closest('.group-item');
     if (!item) return;
+    const name = item.dataset.groupName || item.querySelector('.group-name-input')?.value || '';
     const collapsed = item.classList.toggle('is-collapsed');
+    if (name) {
+        const state = window.getCollapsedDnsGroups();
+        if (collapsed) state[name] = true; else delete state[name];
+        window.saveCollapsedDnsGroups(state);
+    }
     button.setAttribute('aria-expanded', String(!collapsed));
     button.setAttribute('aria-label', collapsed ? 'Развернуть DNS-группу' : 'Свернуть DNS-группу');
     button.title = collapsed ? 'Развернуть DNS-группу' : 'Свернуть DNS-группу';
@@ -293,6 +324,15 @@ window.renameDnsGroup = function(input) {
         });
     }
     input.dataset.prevName = newName;
+    const groupItem = input.closest('.group-item');
+    if (groupItem) {
+        const state = window.getCollapsedDnsGroups();
+        const wasCollapsed = !!state[oldName];
+        if (oldName && oldName !== newName) delete state[oldName];
+        groupItem.dataset.groupName = newName;
+        if (wasCollapsed && newName) state[newName] = true;
+        window.saveCollapsedDnsGroups(state);
+    }
     refreshRouteGroupOptions();
 };
 
