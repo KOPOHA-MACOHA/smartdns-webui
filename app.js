@@ -33,7 +33,7 @@ async function apiCall(action, target = null, body = null) {
             console.error('API вернуло HTML вместо данных! Проверьте index.cgi');
             return action.startsWith('get_') ? '' : false;
         }
-        return action.startsWith('get_') ? text : (text.trim() === 'OK');
+        return action.startsWith('get_') ? text : (action === 'restart_service' ? text.trim() : (text.trim() === 'OK'));
     } catch (e) {
         console.error("API Error:", e);
         return action.startsWith('get_') ? '' : false;
@@ -409,17 +409,46 @@ async function loadConfig() {
 }
 
 async function restartService() {
-    const btn = document.getElementById('global-save-btn');
-    if (!btn.disabled) {
+    const btn = document.getElementById('restart-service-btn');
+    if (btn && btn.disabled) return;
+
+    const saveBtn = document.getElementById('global-save-btn');
+    if (saveBtn && !saveBtn.disabled) {
         const saved = await globalSave();
         if (!saved) return;
     }
-    const restarted = await apiCall('restart_service');
-    if (!restarted) {
-        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.');
-        return;
+
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Перезапуск...';
+        btn.setAttribute('aria-busy', 'true');
     }
-    alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
+
+    try {
+        const result = await apiCall('restart_service');
+        if (result !== 'OK') {
+            const details = typeof result === 'string' && result
+                ? '\n\n' + result.slice(0, 500)
+                : '\n\nНе удалось получить ответ от WebUI.';
+            alert('Перезапуск SmartDNS НЕ подтверждён.' + details);
+            return;
+        }
+        if (isTestMode) {
+            alert('Тестовый режим: запрос проверен, реальный SmartDNS не перезапускался.');
+        } else {
+            alert('SmartDNS успешно перезапущен. Команда завершилась без ошибки, а процесс службы обнаружен после перезапуска.');
+        }
+    } catch (e) {
+        console.error('SmartDNS restart failed:', e);
+        alert('Не удалось проверить результат перезапуска SmartDNS. Обнови страницу и проверь журнал службы.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.innerHTML = originalHtml;
+        }
+    }
 }
 
 async function loadLists() {
