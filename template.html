@@ -290,7 +290,12 @@
 .app-topbar{min-height:62px;padding:0 clamp(14px,2.2vw,32px)!important;display:flex;align-items:center;z-index:100;border-bottom:1px solid var(--line)!important;box-shadow:0 5px 18px rgba(20,42,64,.035)}
 .app-topbar>.container-fluid{display:flex;align-items:center;gap:18px;min-height:62px;padding:0!important}
 .app-topbar .navbar-brand{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:18px;font-weight:750!important;letter-spacing:-.45px;white-space:nowrap}
-.app-topbar .navbar-brand:before{content:"";display:inline-block;width:9px;height:25px;border-radius:5px;background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.app-topbar .navbar-brand:before{display:none}
+.app-brand-mark{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);font-size:19px}
+.app-brand-name{display:inline-flex;align-items:baseline}
+.app-topbar-caption{padding-left:18px;border-left:1px solid var(--line);color:var(--muted);font-size:13px;white-space:nowrap}
+.app-topbar .btn-outline-secondary{border-color:var(--line);color:var(--text)}
+.app-topbar .btn-outline-secondary:hover{background:var(--surface-muted)}
 .app-topbar .d-flex{gap:8px!important}.app-topbar .btn{min-height:36px}
 .app-shell{padding:0!important;max-width:none}
 .app-layout{display:grid!important;grid-template-columns:minmax(0,1fr);margin:0!important;min-height:calc(100vh - 62px)}
@@ -325,10 +330,15 @@
 @media(max-width:767.98px){
 body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 .app-topbar{min-height:56px;padding:6px 12px!important}.app-topbar>.container-fluid{min-height:44px;gap:8px}
-.app-topbar .navbar-brand{font-size:16px}.app-topbar .navbar-brand:before{width:6px;height:21px;box-shadow:0 0 0 3px var(--accent-soft)}
+.app-topbar .navbar-brand{font-size:16px}.app-brand-mark{width:32px;height:32px;border-radius:9px;font-size:17px}.app-topbar-caption{display:none}
 .app-topbar>.container-fluid>.d-flex{flex-wrap:nowrap;gap:5px!important;margin-left:auto}
 .app-topbar #btn-update{margin:0!important;min-height:36px;padding:6px 8px;font-size:11px}
 .app-topbar #test-mode-toggle,.app-topbar .form-check{display:none}
+            .app-topbar #btn-update{flex:0 0 auto}
+            .app-topbar #btn-update .bi{margin:0!important}
+            .app-topbar #btn-update{font-size:0}
+            .app-topbar #btn-update .bi{font-size:14px}
+            .app-topbar #current-version-text{display:none}
 .app-topbar #global-save-btn{min-width:38px;min-height:38px;padding:7px;font-size:0}.app-topbar #global-save-btn .bi{margin:0!important;font-size:16px}
 .app-topbar #theme-toggle,.app-topbar .btn-warning{min-width:36px;min-height:36px;padding:6px}
 .app-topbar .btn-warning{font-size:0}.app-topbar .btn-warning .bi{font-size:16px;margin:0!important}
@@ -354,7 +364,11 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 
 <nav class="navbar app-topbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary sticky-top">
     <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="javascript:void(0);" onclick="resetToHome()">SmartDNS<span class="text-primary">Geo</span></a>
+        <a class="navbar-brand fw-bold app-brand" href="javascript:void(0);" onclick="resetToHome()">
+            <span class="app-brand-mark" aria-hidden="true"><i class="bi bi-hdd-network"></i></span>
+            <span class="app-brand-name">SmartDNS<span class="text-primary">Geo</span></span>
+        </a>
+        <span class="app-topbar-caption">Панель управления DNS</span>
         
         <div class="d-flex align-items-center ms-auto gap-2">
             <!-- Кнопка обновления (всегда видима) -->
