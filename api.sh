@@ -83,18 +83,25 @@ atomic_save() {
 }
 
 restart_smartdns() {
-    # Avoid eval and only execute an actual matching init script.
+    # Keep init-script output out of the CGI response, otherwise the UI's
+    # exact "OK" check can report a false failure. Preserve output for diagnosis.
+    mkdir -p /opt/var/log 2>/dev/null || true
+    SERVICE_LOG="/opt/var/log/smartdns-webui-service.log"
+
     for service_script in /opt/etc/init.d/S*smartdns; do
         if [ -f "$service_script" ] && [ -x "$service_script" ]; then
-            "$service_script" restart
+            printf '[%s] Running: %s restart\n' "$(date)" "$service_script" >> "$SERVICE_LOG"
+            "$service_script" restart >> "$SERVICE_LOG" 2>&1
             return $?
         fi
     done
 
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl restart smartdns
+        printf '[%s] Running: systemctl restart smartdns\n' "$(date)" >> "$SERVICE_LOG"
+        systemctl restart smartdns >> "$SERVICE_LOG" 2>&1
         return $?
     fi
+    printf '[%s] ERROR: no SmartDNS service script found\n' "$(date)" >> "$SERVICE_LOG"
     return 1
 }
 
