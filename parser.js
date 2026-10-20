@@ -152,7 +152,7 @@ const UI = {
             </div>
             <div class="group-body">
                 <div class="group-dns-list dns-server-list">
-                    ${(content || '').split(/\\r?\\n/).filter(line => line.trim()).map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">В этой группе пока нет DNS-серверов</div>'}
+                    ${(content || '').split(/\r?\n/).filter(line => line.trim()).map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">В этой группе пока нет DNS-серверов</div>'}
                 </div>
                 <div class="d-flex justify-content-end mt-2">
                     <button class="btn btn-sm btn-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
