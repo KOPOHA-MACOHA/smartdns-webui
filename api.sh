@@ -83,26 +83,61 @@ atomic_save() {
 }
 
 restart_smartdns() {
-    # Keep init-script output out of the CGI response, otherwise the UI's
-    # exact "OK" check can report a false failure. Preserve output for diagnosis.
+    # Keep service output out of the CGI response. Retain only the latest
+    # restart log so repeated clicks cannot grow this file without bound.
     mkdir -p /opt/var/log 2>/dev/null || true
     SERVICE_LOG="/opt/var/log/smartdns-webui-service.log"
+    : > "$SERVICE_LOG" 2>/dev/null || SERVICE_LOG="/dev/null"
+
+    service_log() {
+        printf '[%s] %s\n' "$(date)" "$*" >> "$SERVICE_LOG"
+    }
+
+    OLD_PID="$(pidof smartdns 2>/dev/null || true)"
+    service_log "Previous SmartDNS PID: ${OLD_PID:-not running}"
+    RESTART_RC=1
+    SERVICE_FOUND=0
 
     for service_script in /opt/etc/init.d/S*smartdns; do
         if [ -f "$service_script" ] && [ -x "$service_script" ]; then
-            printf '[%s] Running: %s restart\n' "$(date)" "$service_script" >> "$SERVICE_LOG"
+            SERVICE_FOUND=1
+            service_log "Running: $service_script restart"
             "$service_script" restart >> "$SERVICE_LOG" 2>&1
-            return $?
+            RESTART_RC=$?
+            break
         fi
     done
 
-    if command -v systemctl >/dev/null 2>&1; then
-        printf '[%s] Running: systemctl restart smartdns\n' "$(date)" >> "$SERVICE_LOG"
+    if [ "$SERVICE_FOUND" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then
+        SERVICE_FOUND=1
+        service_log "Running: systemctl restart smartdns"
         systemctl restart smartdns >> "$SERVICE_LOG" 2>&1
-        return $?
+        RESTART_RC=$?
     fi
-    printf '[%s] ERROR: no SmartDNS service script found\n' "$(date)" >> "$SERVICE_LOG"
-    return 1
+
+    if [ "$SERVICE_FOUND" -eq 0 ]; then
+        service_log "ERROR: no SmartDNS service script found"
+        return 1
+    fi
+
+    # A successful exit code alone is not enough: wait up to 5 seconds
+    # for the SmartDNS process to appear after the restart.
+    WAIT=0
+    NEW_PID=""
+    while [ "$WAIT" -lt 5 ]; do
+        NEW_PID="$(pidof smartdns 2>/dev/null || true)"
+        [ -n "$NEW_PID" ] && break
+        sleep 1
+        WAIT=$((WAIT + 1))
+    done
+
+    if [ -z "$NEW_PID" ]; then
+        service_log "ERROR: SmartDNS process did not appear (restart exit code $RESTART_RC)"
+        return 1
+    fi
+
+    service_log "SmartDNS process is running; PID: $NEW_PID; restart exit code: $RESTART_RC"
+    return 0
 }
 
 acquire_update_lock() {
