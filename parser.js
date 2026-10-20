@@ -66,15 +66,17 @@ const UI = {
             .replace(/\s+-exclude-default-group\b/g, '')
             .replace(/\s+-group\s+[^\s]+/g, '')
             .trim();
-        const displayValue = isComment ? '# ' + cleanLine : cleanLine;
-        const parts = window.parseDnsModalValue ? window.parseDnsModalValue(displayValue) : { type: 'udp4', address: displayValue, port: '', path: '/dns-query', options: '' };
+        const parts = window.parseDnsModalValue ? window.parseDnsModalValue(cleanLine) : { type: 'udp4', address: cleanLine, port: '', path: '/dns-query', options: '' };
         const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
         const endpoint = (parts.type === 'doh' ? 'https://' : '') + (parts.address || '') + (parts.port ? ':' + parts.port : '') + (['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : '');
-        const protocol = isComment ? 'Отключён' : (labels[parts.type] || 'DNS');
-        return `<div class="dns-server-row d-flex align-items-center gap-3">
+        const protocol = labels[parts.type] || 'DNS';
+        return `<div class="dns-server-row d-flex align-items-center gap-3${isComment ? ' is-disabled' : ''}">
+            <label class="dns-enabled-control" title="Включить или отключить DNS-запись">
+                <input type="checkbox" class="dns-enabled" ${isComment ? '' : 'checked'} onchange="toggleDnsRecord(this)" aria-label="Включить DNS-запись">
+            </label>
             <span class="dns-protocol">${UI.escape(protocol)}</span>
             <span class="dns-endpoint flex-grow-1" title="${UI.escape(endpoint)}">${UI.escape(endpoint)}</span>
-            <input type="hidden" class="dns-value" value="${UI.escape(displayValue)}">
+            <input type="hidden" class="dns-value" value="${UI.escape(cleanLine)}">
             <button type="button" class="icon-action" onclick="openDnsModal(this.closest('.dns-server-list'), this.closest('.dns-server-row'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button type="button" class="icon-action danger" onclick="this.closest('.dns-server-row').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button>
         </div>`;
@@ -227,6 +229,14 @@ window.applyDnsGroupCollapseState = function() {
         }
     });
 };
+window.toggleDnsRecord = function(checkbox) {
+    const row = checkbox.closest('.dns-server-row');
+    if (!row) return;
+    row.classList.toggle('is-disabled', !checkbox.checked);
+    checkbox.title = checkbox.checked ? 'DNS-запись включена' : 'DNS-запись отключена';
+    markConfigDirty();
+};
+
 window.toggleDnsGroup = function(button) {
     const item = button.closest('.group-item');
     if (!item) return;
@@ -392,7 +402,7 @@ window.openDnsModal = function(target, row = null) {
     if (!modal || !window.bootstrap) return;
     window.dnsModalTarget = target;
     window.dnsModalEditRow = row;
-    window.dnsModalWasCommented = !!(row && (row.querySelector('.dns-value')?.value || '').trim().startsWith('#'));
+    window.dnsModalWasCommented = !!(row && !row.querySelector('.dns-enabled')?.checked);
     const title = document.getElementById('dns-server-modal-title');
     const submit = document.getElementById('dns-modal-submit');
     if (row) {
@@ -633,7 +643,12 @@ function gatherSectionsText() {
     if (coreOthers.trim()) text += coreOthers.trim() + '\n';
     text += '\n';
 
-    const collectDnsRows = id => Array.from(document.querySelectorAll('#sec-' + id + ' .dns-value')).map(input => input.value.trim()).filter(Boolean);
+    const serializeDnsRow = input => {
+        const value = input.value.trim().replace(/^#+\\s*/, '');
+        const enabled = input.closest('.dns-server-row')?.querySelector('.dns-enabled')?.checked !== false;
+        return value ? (enabled ? value : '# ' + value) : '';
+    };
+    const collectDnsRows = id => Array.from(document.querySelectorAll('#sec-' + id + ' .dns-value')).map(serializeDnsRow).filter(Boolean);
     const bsRows = collectDnsRows('bootstrap');
     if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDns(line, '-bootstrap-dns') + '\n'; }); text += '\n'; }
     const upRows = collectDnsRows('upstream');
@@ -645,7 +660,7 @@ function gatherSectionsText() {
         text += `##########\n# Групповые записи #\n##########\n`;
         grpItems.forEach(item => {
             let name = item.querySelector('.group-name-input').value.trim();
-            const dnsRows = Array.from(item.querySelectorAll('.dns-value')).map(input => input.value.trim()).filter(Boolean);
+            const dnsRows = Array.from(item.querySelectorAll('.dns-value')).map(serializeDnsRow).filter(Boolean);
             if (name && dnsRows.length) {
                 dnsRows.forEach(line => { text += formatDns(line, `-exclude-default-group -group ${name}`) + '\n'; });
             }
