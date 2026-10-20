@@ -66,15 +66,17 @@ const UI = {
             .replace(/\s+-exclude-default-group\b/g, '')
             .replace(/\s+-group\s+[^\s]+/g, '')
             .trim();
-        const displayValue = isComment ? '# ' + cleanLine : cleanLine;
-        const parts = window.parseDnsModalValue ? window.parseDnsModalValue(displayValue) : { type: 'udp4', address: displayValue, port: '', path: '/dns-query', options: '' };
+        const parts = window.parseDnsModalValue ? window.parseDnsModalValue(cleanLine) : { type: 'udp4', address: cleanLine, port: '', path: '/dns-query', options: '' };
         const labels = { udp4: 'DNS IPv4', udp6: 'DNS IPv6', tcp: 'TCP', dot: 'DoT', doh: 'DoH', doq: 'DoQ', h3: 'HTTP/3' };
         const endpoint = (parts.type === 'doh' ? 'https://' : '') + (parts.address || '') + (parts.port ? ':' + parts.port : '') + (['doh','h3'].includes(parts.type) ? (parts.path || '/dns-query') : '');
-        const protocol = isComment ? 'Отключён' : (labels[parts.type] || 'DNS');
-        return `<div class="dns-server-row d-flex align-items-center gap-3">
+        const protocol = labels[parts.type] || 'DNS';
+        return `<div class="dns-server-row d-flex align-items-center gap-3${isComment ? ' is-disabled' : ''}">
+            <label class="dns-enabled-control" title="Включить или отключить DNS-запись">
+                <input type="checkbox" class="dns-enabled" ${isComment ? '' : 'checked'} onchange="toggleDnsRecord(this)" aria-label="Включить DNS-запись">
+            </label>
             <span class="dns-protocol">${UI.escape(protocol)}</span>
             <span class="dns-endpoint flex-grow-1" title="${UI.escape(endpoint)}">${UI.escape(endpoint)}</span>
-            <input type="hidden" class="dns-value" value="${UI.escape(displayValue)}">
+            <input type="hidden" class="dns-value" value="${UI.escape(cleanLine)}">
             <button type="button" class="icon-action" onclick="openDnsModal(this.closest('.dns-server-list'), this.closest('.dns-server-row'))" aria-label="Редактировать DNS" title="Редактировать"><i class="bi bi-pencil"></i></button>
             <button type="button" class="icon-action danger" onclick="this.closest('.dns-server-row').remove(); markConfigDirty()" aria-label="Удалить DNS" title="Удалить"><i class="bi bi-trash3"></i></button>
         </div>`;
@@ -101,10 +103,13 @@ const UI = {
             </div>
         </div>`,
 
-    addressRow: (domain, ip) => `
-        <div class="address-item d-flex mb-2 align-items-center">
+    addressRow: (domain, ip, enabled = true) => `
+        <div class="address-item d-flex mb-2 align-items-center${enabled ? '' : ' is-disabled'}">
+            <label class="dns-enabled-control" title="Включить или отключить локальный адрес">
+                <input type="checkbox" class="addr-enabled" ${enabled ? 'checked' : ''} onchange="toggleAddressRecord(this)" aria-label="Включить локальный адрес">
+            </label>
             <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен (или # домен)" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP" value="${UI.escape(ip)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
         </div>`,
@@ -227,6 +232,21 @@ window.applyDnsGroupCollapseState = function() {
         }
     });
 };
+window.toggleDnsRecord = function(checkbox) {
+    const row = checkbox.closest('.dns-server-row');
+    if (!row) return;
+    row.classList.toggle('is-disabled', !checkbox.checked);
+    checkbox.title = checkbox.checked ? 'DNS-запись включена' : 'DNS-запись отключена';
+    markConfigDirty();
+};
+window.toggleAddressRecord = function(checkbox) {
+    const row = checkbox.closest('.address-item');
+    if (!row) return;
+    row.classList.toggle('is-disabled', !checkbox.checked);
+    checkbox.title = checkbox.checked ? 'Локальный адрес включён' : 'Локальный адрес отключён';
+    markConfigDirty();
+};
+
 window.toggleDnsGroup = function(button) {
     const item = button.closest('.group-item');
     if (!item) return;
@@ -392,7 +412,7 @@ window.openDnsModal = function(target, row = null) {
     if (!modal || !window.bootstrap) return;
     window.dnsModalTarget = target;
     window.dnsModalEditRow = row;
-    window.dnsModalWasCommented = !!(row && (row.querySelector('.dns-value')?.value || '').trim().startsWith('#'));
+    window.dnsModalWasCommented = !!(row && !row.querySelector('.dns-enabled')?.checked);
     const title = document.getElementById('dns-server-modal-title');
     const submit = document.getElementById('dns-modal-submit');
     if (row) {
@@ -506,7 +526,7 @@ function parseConfigToSections(content) {
             else other.push(originalTrimmed);
         } else if (cmd === 'address') {
             let m = activeLine.match(/^address\s+\/([^\/]+)\/(.+)$/);
-            if (m) addresses.push({ domain: (isComment ? '# ' : '') + m[1], ip: m[2].replace(/,/g, '') });
+            if (m) addresses.push({ domain: m[1], ip: m[2].replace(/,/g, ''), enabled: !isComment });
             else other.push(originalTrimmed);
         } else if (cmd === 'domain-set') {
             let m = activeLine.match(/-name\s+([\w.-]+)\s+-file\s+(.+)$/);
@@ -564,7 +584,7 @@ function parseConfigToSections(content) {
 
     let groupsHtml = Object.keys(groupsObj).map(g => UI.groupCard(g, groupsObj[g].join('\n'))).join('');
     let routesHtml = Object.keys(routesObj).map(r => UI.routeCard(r, routesObj[r].group, routesObj[r].files.join('\n'))).join('');
-    let addrHtml = addresses.map(a => UI.addressRow(a.domain, a.ip)).join('');
+    let addrHtml = addresses.map(a => UI.addressRow(a.domain, a.ip, a.enabled)).join('');
 
     return `
     <div class="row">
@@ -633,7 +653,12 @@ function gatherSectionsText() {
     if (coreOthers.trim()) text += coreOthers.trim() + '\n';
     text += '\n';
 
-    const collectDnsRows = id => Array.from(document.querySelectorAll('#sec-' + id + ' .dns-value')).map(input => input.value.trim()).filter(Boolean);
+    const serializeDnsRow = input => {
+        const value = input.value.trim().replace(/^#+\s*/, '');
+        const enabled = input.closest('.dns-server-row')?.querySelector('.dns-enabled')?.checked !== false;
+        return value ? (enabled ? value : '# ' + value) : '';
+    };
+    const collectDnsRows = id => Array.from(document.querySelectorAll('#sec-' + id + ' .dns-value')).map(serializeDnsRow).filter(Boolean);
     const bsRows = collectDnsRows('bootstrap');
     if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDns(line, '-bootstrap-dns') + '\n'; }); text += '\n'; }
     const upRows = collectDnsRows('upstream');
@@ -645,7 +670,7 @@ function gatherSectionsText() {
         text += `##########\n# Групповые записи #\n##########\n`;
         grpItems.forEach(item => {
             let name = item.querySelector('.group-name-input').value.trim();
-            const dnsRows = Array.from(item.querySelectorAll('.dns-value')).map(input => input.value.trim()).filter(Boolean);
+            const dnsRows = Array.from(item.querySelectorAll('.dns-value')).map(serializeDnsRow).filter(Boolean);
             if (name && dnsRows.length) {
                 dnsRows.forEach(line => { text += formatDns(line, `-exclude-default-group -group ${name}`) + '\n'; });
             }
@@ -682,11 +707,8 @@ function gatherSectionsText() {
         addrItems.forEach(item => {
             let domain = item.querySelector('.addr-domain').value.trim().replace(/,/g, '');
             let ip = item.querySelector('.addr-ip').value.trim().replace(/,/g, '');
-            if (domain && ip) {
-                let isComment = domain.startsWith('#');
-                if (isComment) domain = domain.replace(/^#+\s*/, '');
-                text += (isComment ? '#' : '') + `address /${domain}/${ip}\n`;
-            }
+            const enabled = item.querySelector('.addr-enabled')?.checked !== false;
+            if (domain && ip) text += (enabled ? '' : '# ') + `address /${domain}/${ip}\n`;
         });
         text += '\n';
     }
