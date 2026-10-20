@@ -644,7 +644,7 @@ function gatherSectionsText() {
     text += '\n';
 
     const serializeDnsRow = input => {
-        const value = input.value.trim().replace(/^#+\\s*/, '');
+        const value = input.value.trim().replace(/^#+\s*/, '');
         const enabled = input.closest('.dns-server-row')?.querySelector('.dns-enabled')?.checked !== false;
         return value ? (enabled ? value : '# ' + value) : '';
     };
