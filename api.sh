@@ -136,6 +136,11 @@ restart_smartdns() {
         return 1
     fi
 
+    if [ -n "$OLD_PID" ] && [ "$NEW_PID" = "$OLD_PID" ]; then
+        service_log "ERROR: SmartDNS is still running with the same PID; restart could not be confirmed"
+        return 1
+    fi
+
     service_log "SmartDNS process is running; PID: $NEW_PID; restart exit code: $RESTART_RC"
     return 0
 }
