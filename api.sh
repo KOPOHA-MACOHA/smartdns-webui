@@ -131,17 +131,22 @@ restart_smartdns() {
         WAIT=$((WAIT + 1))
     done
 
+    if [ "$RESTART_RC" -ne 0 ]; then
+        service_log "ERROR: restart command exited with code $RESTART_RC; process after restart: ${NEW_PID:-not running}"
+        return 1
+    fi
+
     if [ -z "$NEW_PID" ]; then
-        service_log "ERROR: SmartDNS process did not appear (restart exit code $RESTART_RC)"
+        service_log "ERROR: SmartDNS process did not appear after restart"
         return 1
     fi
 
     if [ -n "$OLD_PID" ] && [ "$NEW_PID" = "$OLD_PID" ]; then
-        service_log "ERROR: SmartDNS is still running with the same PID; restart could not be confirmed"
+        service_log "ERROR: SmartDNS PID did not change (before: $OLD_PID; after: $NEW_PID)"
         return 1
     fi
 
-    service_log "SmartDNS process is running; PID: $NEW_PID; restart exit code: $RESTART_RC"
+    service_log "SUCCESS: restart command exited 0; SmartDNS process is running; PID: $NEW_PID"
     return 0
 }
 
@@ -234,7 +239,7 @@ handle_api() {
             elif restart_smartdns; then
                 echo "OK"
             else
-                echo "ERROR: restart_service failed"
+                echo "ERROR: SmartDNS restart was not confirmed. See /opt/var/log/smartdns-webui-service.log"
             fi
             ;;
         "get_config")
