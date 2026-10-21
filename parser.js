@@ -258,6 +258,13 @@ window.toggleDnsGroup = function(button) {
         icon.classList.toggle('bi-chevron-down', !collapsed);
         icon.classList.toggle('bi-chevron-right', collapsed);
     }
+    // A collapsed group's textarea cannot report its full scrollHeight until it is visible.
+    if (!collapsed) {
+        const textarea = item.querySelector('textarea.dns-multiline-editor');
+        if (textarea && typeof autoResizeTextarea === 'function') {
+            setTimeout(() => autoResizeTextarea(textarea), 0);
+        }
+    }
 };
 
 window.addNewGroupUI = () => {
