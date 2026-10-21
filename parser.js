@@ -84,8 +84,8 @@ const UI = {
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
         const body = dnsSection
-            ? '<textarea id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.join('\\n')) + '</textarea>'
-            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\\n')) + '</textarea>';
+            ? '<textarea id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.join('\n')) + '</textarea>'
+            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\n')) + '</textarea>';
         return '<div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>' + title + '</span></div><div class="card-body p-0">' + (notice ? '<div class="p-2 text-muted small border-bottom">' + notice + '</div>' : '') + body + '</div></div>';
     },
     logCard: (level) => `
