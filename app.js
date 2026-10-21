@@ -407,6 +407,22 @@ window.addEventListener('popstate', (e) => {
 
 // === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
 async function validateConfigLogical(text) {
+    if (currentSettingsMode === 'ui') {
+        const definedGroups = new Set(Array.from(document.querySelectorAll('.group-name-input'))
+            .map(input => input.value.trim()).filter(Boolean));
+        for (const [index, item] of Array.from(document.querySelectorAll('.route-item')).entries()) {
+            const routeName = item.querySelector('.route-name')?.value.trim() || '';
+            const group = item.querySelector('.route-group')?.value.trim() || '';
+            const fileSelects = Array.from(item.querySelectorAll('.route-file-select'));
+            const files = fileSelects.map(select => select.value.trim());
+            if (!routeName) return `Маршрут №${index + 1}: укажите имя набора или удалите незаполненный маршрут.`;
+            if (!group) return `Маршрут "${routeName}": выберите DNS-группу.`;
+            if (!definedGroups.has(group)) return `Маршрут "${routeName}": DNS-группа "${group}" не создана. Сначала создайте группу или выберите существующую.`;
+            if (!fileSelects.length || files.some(file => !file) || !files.some(Boolean)) {
+                return `Маршрут "${routeName}": выберите список для каждого добавленного поля или удалите пустое поле списка.`;
+            }
+        }
+    }
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     let groupNames;
@@ -622,17 +638,36 @@ async function loadLists() {
     container.replaceChildren();
 
     lists.forEach(name => {
-        const item = document.createElement('a');
-        item.href = '#';
-        item.className = 'list-group-item list-group-item-action ' +
+        const item = document.createElement('div');
+        item.className = 'list-group-item list-group-item-action d-flex align-items-center gap-2 ' +
             (name === activeList ? 'active' : 'bg-dark text-light border-secondary');
+        item.setAttribute('role', 'group');
+        item.title = name;
+
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.dataset.listName = name;
+        selectButton.setAttribute('aria-label', 'Выбрать список ' + name);
+        selectButton.className = 'btn btn-link text-start text-decoration-none p-0 flex-grow-1 text-reset';
+        selectButton.style.minWidth = '0';
+        selectButton.style.overflowWrap = 'anywhere';
         const icon = document.createElement('i');
         icon.className = 'bi bi-file-earmark-text me-2';
-        item.append(icon, document.createTextNode(name));
-        item.addEventListener('click', event => {
-            event.preventDefault();
-            selectList(name);
+        selectButton.append(icon, document.createTextNode(name));
+        selectButton.addEventListener('click', () => selectList(name));
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'btn btn-sm btn-outline-danger flex-shrink-0';
+        deleteButton.title = 'Удалить список ' + name;
+        deleteButton.setAttribute('aria-label', 'Удалить список ' + name);
+        deleteButton.innerHTML = '<i class="bi bi-trash"></i>';
+        deleteButton.addEventListener('click', event => {
+            event.stopPropagation();
+            deleteList(name);
         });
+
+        item.append(selectButton, deleteButton);
         container.appendChild(item);
     });
 
@@ -650,12 +685,11 @@ async function selectList(name) {
     activeList = name;
     
     document.querySelectorAll('#lists-container .list-group-item').forEach(el => {
-        el.classList.remove('active');
-        el.classList.add('bg-dark', 'text-light', 'border-secondary');
-        if (el.innerText.trim() === name) {
-            el.classList.add('active');
-            el.classList.remove('bg-dark', 'text-light', 'border-secondary');
-        }
+        const selected = el.querySelector('button[aria-label^="Выбрать список"]')?.dataset.listName === name;
+        el.classList.toggle('active', selected);
+        el.classList.toggle('bg-dark', !selected);
+        el.classList.toggle('text-light', !selected);
+        el.classList.toggle('border-secondary', !selected);
     });
     
     document.getElementById('current-list-title').innerText = 'Редактирование: ' + name;
@@ -689,18 +723,28 @@ async function createList() {
     await selectList(name);
 }
 
-async function deleteList() {
-    if (!activeList || !confirm('Точно удалить ' + activeList + '?')) return;
-    const deleted = await apiCall('delete_list', activeList);
+async function deleteList(name = activeList) {
+    if (!name || !confirm('Точно удалить ' + name + '?')) return;
+    if (name === activeList) {
+        const saveButton = document.getElementById('global-save-btn');
+        if (saveButton && !saveButton.disabled &&
+            !confirm('В текущем списке есть несохранённые изменения. Удалить список вместе с ними?')) return;
+    }
+
+    const deleted = await apiCall('delete_list', name);
     if (!deleted) {
         alert('Не удалось удалить список. Проверьте права доступа и журнал.');
         return;
     }
-    activeList = '';
-    const ta = document.getElementById('list-content');
-    ta.value = ''; ta.disabled = true;
-    originalListContent = '';
-    document.getElementById('current-list-title').innerText = 'Выберите список';
+
+    if (name === activeList) {
+        activeList = '';
+        const ta = document.getElementById('list-content');
+        ta.value = '';
+        ta.disabled = true;
+        originalListContent = '';
+        document.getElementById('current-list-title').innerText = 'Выберите список';
+    }
     await loadLists();
 }
 
@@ -709,10 +753,67 @@ async function loadLog() {
 }
 
 document.addEventListener('click', (e) => {
-    if (activeTab === 'settings' && currentSettingsMode === 'ui' &&
-        e.target.closest('#config-sections')) {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
+        !e.target.closest('#config-sections')) return;
+
+    // Structural actions do not fire input/change events, so save the DOM before
+    // adding/removing a route, DNS group, or route-list row.
+    const action = e.target.closest('button[onclick]');
+    const handler = action?.getAttribute('onclick') || '';
+    const changesStructure = /addNewGroupUI|addNewRouteUI|addRouteFileUI|\.closest\('\.(?:group-item|route-item|route-file-row)'\)\.remove\(\)/.test(handler);
+    if (changesStructure) {
         commitPendingSettingsEdit();
+        const before = captureSettingsSnapshot();
+        if (before && (!settingsUndoHistory.lastSnapshot ||
+            !settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, before))) {
+            settingsUndoHistory.lastSnapshot = before;
+        }
+        if (before) pushSettingsUndo(before);
+        settingsUndoHistory.lastSnapshot = before;
+        return;
     }
+
+    commitPendingSettingsEdit();
+}, true);
+
+// Capture a select's state before the user changes it. The DOM value is already
+// updated by the time its change event fires, so relying only on that event can
+// leave undo history with a post-change snapshot.
+const selectUndoBefore = new WeakMap();
+function rememberSelectUndoBefore(target) {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
+        !target || target.tagName !== 'SELECT' ||
+        !target.closest('#config-sections')) return;
+    const snapshot = captureSettingsSnapshot();
+    if (snapshot) selectUndoBefore.set(target, snapshot);
+}
+
+document.addEventListener('focusin', (e) => rememberSelectUndoBefore(e.target), true);
+document.addEventListener('pointerdown', (e) => rememberSelectUndoBefore(e.target), true);
+document.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) rememberSelectUndoBefore(e.target);
+}, true);
+
+// Select values have already changed when the change event fires. Prefer the
+// snapshot captured on focus/pointer/keyboard interaction, then advance baseline.
+document.addEventListener('change', (e) => {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
+        !e.target || e.target.tagName !== 'SELECT' ||
+        !e.target.closest('#config-sections')) return;
+    const current = captureSettingsSnapshot();
+    const previous = selectUndoBefore.get(e.target) || settingsUndoHistory.lastSnapshot;
+    selectUndoBefore.delete(e.target);
+    if (!current || !previous || settingsSnapshotsEqual(previous, current)) {
+        settingsUndoHistory.lastSnapshot = current || settingsUndoHistory.lastSnapshot;
+        return;
+    }
+
+    // Finish any edit already in progress before recording the select change.
+    // The prior edit has its own undo entry; the select needs an additional
+    // checkpoint for the exact state immediately before this selection.
+    commitPendingSettingsEdit();
+    pushSettingsUndo(previous);
+    settingsUndoHistory.lastSnapshot = current;
 }, true);
 
 document.addEventListener('keydown', (e) => {
@@ -935,7 +1036,7 @@ window.refreshRouteFileOptions = async function() {
     try { names = (await apiCall('get_lists')).split('\n').map(name => name.trim()).filter(Boolean); } catch (_) { return; }
     selects.forEach(select => {
         const current = select.value || select.dataset.currentPath || '';
-        const options = ['<option value="">Выберите список…</option>'];
+        const options = ['<option value="" disabled>Выберите список…</option>'];
         names.forEach(name => {
             const path = name.startsWith('/') ? name : '/opt/etc/smartdns/domains/' + name;
             options.push('<option value="' + UI.escape(path) + '">' + UI.escape(name) + '</option>');
@@ -945,6 +1046,8 @@ window.refreshRouteFileOptions = async function() {
         select.innerHTML = options.join('');
         select.value = current;
         select.dataset.currentPath = current;
+        select.disabled = names.length === 0 && !current;
+        select.title = select.disabled ? 'Сначала создайте список доменов' : '';
     });
 };
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===

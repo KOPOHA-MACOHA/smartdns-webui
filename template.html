@@ -51,6 +51,19 @@
         .group-item, .route-item { padding: 14px !important; margin-bottom: 12px !important; background: var(--surface) !important; border: 1px solid var(--line) !important; border-radius: 10px !important; box-shadow: var(--shadow); }
         .group-item + .group-item, .route-item + .route-item { margin-top: 0; }
         .form-control, .form-select { min-height: 36px; background: var(--field) !important; color: var(--text) !important; border: 1px solid var(--field-border) !important; border-radius: 7px !important; box-shadow: none; }
+        /* The background shorthand above resets Bootstrap's native select arrow; restore a visible chevron. */
+        .form-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23aab7c4' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 6 5 5 5-5'/%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important;
+            background-position: right .65rem center !important;
+            background-size: 16px 12px !important;
+            padding-right: 2.25rem !important;
+        }
+        .form-select:disabled { opacity: .65; cursor: not-allowed; }
+        /* Keep the log-level chevron independent of native/Bootstrap select background images. */
+        .log-level-select-wrap { position: relative; display: inline-flex; width: 50%; min-width: 0; }
+        .log-level-select-wrap #sec-logging-select { width: 100%; padding-right: 2.25rem !important; appearance: none !important; -webkit-appearance: none !important; background-image: none !important; }
+        .log-level-select-wrap::after { content: ""; position: absolute; right: .9rem; top: 50%; width: 8px; height: 8px; border-right: 2px solid #aab7c4; border-bottom: 2px solid #aab7c4; transform: translateY(-65%) rotate(45deg); pointer-events: none; }
         .form-control:focus, .form-select:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 17%, transparent) !important; }
         .form-control::placeholder { color: var(--muted) !important; opacity: .8; }
         .form-check-input { background-color: var(--field); border-color: var(--field-border); }
@@ -692,7 +705,6 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
                         <div class="card bg-dark border-secondary">
                             <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                                 <span id="current-list-title">Выберите список</span>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteList()"><i class="bi bi-trash"></i> Удалить</button>
                             </div>
                             <textarea id="list-content" class="form-control code-font border-0 rounded-0" rows="20" disabled oninput="markListDirty()"></textarea>
                         </div>
@@ -765,9 +777,9 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=21"></script>
+<script src="parser.js?v=23"></script>
 <script src="validator.js?v=1"></script>
 <script src="version.js?v=1"></script>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
