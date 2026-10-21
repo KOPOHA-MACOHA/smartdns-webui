@@ -71,6 +71,19 @@
             const directive = parts[0];
             const args = parts.slice(1);
 
+            if (SERVER_DIRECTIVES.has(directive)) {
+                // Stop at options: URL-valued options are not extra endpoints.
+                const optionsIndex = args.findIndex((arg, i) => i > 0 && arg.startsWith('-'));
+                const endpoints = args.slice(1, optionsIndex < 0 ? args.length : optionsIndex);
+                if (endpoints.some(arg => /^(?:https?|tls|dot|quic|doq|h3|tcp):\/\//i.test(arg.replace(/^["']/, '')))) {
+                    errors.push('Строка ' + lineNo + ': укажите каждый DNS-сервер отдельной строкой; несколько URL в одной директиве не поддерживаются.');
+                }
+            }
+            if (directive === 'response-mode' && args.length &&
+                !['first-ping', 'fastest-ip', 'fastest-response'].includes(args[0])) {
+                errors.push('Строка ' + lineNo + ': неизвестный response-mode "' + args[0] + '".');
+            }
+
             if (REQUIRED_VALUE.has(directive) && args.length === 0) {
                 errors.push('Строка ' + lineNo + ': директива ' + directive + ' требует значение.');
                 return;

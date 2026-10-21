@@ -54,6 +54,34 @@ window.cleanDns = function(line, suffixesToRemove) {
     return isComment ? `# ${line}` : line;
 }
 
+// Existing directives carry their own membership; defaults apply to new endpoints.
+window.dnsMembership = function(line) {
+    const tokens = line.replace(/^#+\s*/, '').match(/"[^"]*"|'[^']*'|\S+/g) || [];
+    const groups = [];
+    tokens.forEach((token, i) => {
+        if ((token === '-group' || token === '-g') && tokens[i + 1]) groups.push(tokens[i + 1]);
+    });
+    return { tokens, groups, bootstrap: tokens.includes('-bootstrap-dns') || tokens.includes('-b') };
+};
+window.formatDnsForSection = function(line, group = '', sourceGroup = '', bootstrap = false) {
+    const raw = line.trim();
+    const active = raw.replace(/^#+\s*/, '');
+    if (raw.startsWith('#') && !/^(?:server(?:-[a-z0-9]+)?\s|\w+:\/\/|\d|\[|[^\s]+\.[^\s]+)/.test(active)) return raw;
+    let result = formatDns(raw, '');
+    const membership = dnsMembership(active);
+    const hasGroup = membership.groups.length > 0;
+    if (group && sourceGroup && group !== sourceGroup && hasGroup) {
+        const tokens = dnsMembership(result).tokens;
+        tokens.forEach((token, i) => {
+            if ((token === '-group' || token === '-g') && tokens[i + 1] === sourceGroup) tokens[i + 1] = group;
+        });
+        result = (result.startsWith('#') ? '#' : '') + tokens.join(' ');
+    }
+    if (group && !hasGroup) result += ` -exclude-default-group -group ${group}`;
+    if (bootstrap && !membership.bootstrap) result += ' -bootstrap-dns';
+    return result;
+};
+
 // === ГЕНЕРАТОРЫ HTML КАРТОЧЕК ===
 const UI = {
     escape: (str) => str ? str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '',
@@ -108,7 +136,7 @@ const UI = {
             </label>
             <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
             <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP" value="${UI.escape(ip)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP через запятую" value="${UI.escape(ip)}" oninput="markConfigDirty()">
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
         </div>`,
 
@@ -142,7 +170,7 @@ const UI = {
         </div>`,
 
     groupCard: (name, content) => `
-        <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm" data-group-name="${UI.escape(name)}">
+        <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm" data-group-name="${UI.escape(name)}" data-source-group="${UI.escape(name)}">
             <div class="group-heading d-flex gap-2 align-items-center mb-2" onclick="toggleDnsGroupFromHeader(event, this)">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <button type="button" class="group-collapse-toggle btn btn-sm btn-link text-reset p-1" onclick="toggleDnsGroup(this)" aria-expanded="true" title="Свернуть DNS-группу" aria-label="Свернуть DNS-группу"><i class="bi bi-chevron-down"></i></button>
@@ -162,7 +190,7 @@ const UI = {
             <div class="card-header border-secondary section-header py-2"><span>Основные параметры (Core)</span></div>
             <div class="card-body p-3">
                 <div class="row mb-3 align-items-center">
-                    <div class="col-sm-6"><label class="form-label text-light small mb-0">Порт (bind):</label></div>
+                    <div class="col-sm-6"><label class="form-label text-light small mb-0">Адрес и порт (bind):</label></div>
                     <div class="col-sm-6"><input type="text" id="core-bind" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.bind)}" oninput="markConfigDirty()"></div>
                 </div>
                 <div class="row mb-3 align-items-center">
@@ -182,8 +210,9 @@ const UI = {
                     <div class="col-sm-6">
                         <select id="core-response-mode" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty()">
                             <option value="fastest-response" ${data.response_mode === 'fastest-response' ? 'selected' : ''}>fastest-response</option>
-                            <option value="first-response" ${data.response_mode === 'first-response' ? 'selected' : ''}>first-response</option>
-                            <option value="tcp-fastest" ${data.response_mode === 'tcp-fastest' ? 'selected' : ''}>tcp-fastest</option>
+                            <option value="first-ping" ${data.response_mode === 'first-ping' ? 'selected' : ''}>first-ping</option>
+                            <option value="fastest-ip" ${data.response_mode === 'fastest-ip' ? 'selected' : ''}>fastest-ip</option>
+                            ${['fastest-response','first-ping','fastest-ip'].includes(data.response_mode) ? '' : `<option value="${UI.escape(data.response_mode)}" selected>${UI.escape(data.response_mode)} (проверьте значение)</option>`}
                         </select>
                     </div>
                 </div>
@@ -196,6 +225,7 @@ const UI = {
                     </div>
                 </div>
                 <input type="hidden" id="sec-core-others" value="${UI.escape(rawLines.join('\n'))}">
+                <input type="hidden" id="core-speed-original" value="${UI.escape(data.speed_check_mode)}" data-selection="${['tcp:443','tcp:80','ping'].filter(v => data.speed_check_mode.split(',').includes(v)).join(',')}">
             </div>
         </div>`
 };
@@ -497,7 +527,8 @@ function parseConfigToSections(content) {
     let addresses = [];
     let routesObj = {}; 
     let logging = { level: 'notice' };
-    let coreData = { bind: '53', cache_size: '65536', prefetch_domain: 'yes', serve_expired: 'yes', response_mode: 'fastest-response', speed_check_mode: 'tcp:443,ping' };
+    let coreData = { bind: ':53', cache_size: '65536', prefetch_domain: 'yes', serve_expired: 'yes', response_mode: 'fastest-response', speed_check_mode: '' };
+    let seenBind = false;
 
     content.split(/\r?\n/).forEach(line => {
         const originalTrimmed = line.trim();
@@ -519,7 +550,10 @@ function parseConfigToSections(content) {
         if (['bind', 'cache-size', 'prefetch-domain', 'serve-expired', 'response-mode', 'speed-check-mode'].includes(cmd)) {
             if (!isComment) {
                 const val = activeLine.substring(cmd.length).trim();
-                if (cmd === 'bind') coreData.bind = val.replace(/^:/, '');
+                if (cmd === 'bind') {
+                    if (seenBind) coreLines.push(originalTrimmed);
+                    else { coreData.bind = val; seenBind = true; }
+                }
                 else if (cmd === 'cache-size') coreData.cache_size = val;
                 else if (cmd === 'prefetch-domain') coreData.prefetch_domain = val;
                 else if (cmd === 'serve-expired') coreData.serve_expired = val;
@@ -535,7 +569,7 @@ function parseConfigToSections(content) {
             else other.push(originalTrimmed);
         } else if (cmd === 'address') {
             let m = activeLine.match(/^address\s+\/([^\/]+)\/(.+)$/);
-            if (m) addresses.push({ domain: m[1], ip: m[2].replace(/,/g, ''), enabled: !isComment });
+            if (m) addresses.push({ domain: m[1], ip: m[2], enabled: !isComment });
             else other.push(originalTrimmed);
         } else if (cmd === 'domain-set') {
             let m = activeLine.match(/-name\s+([\w.-]+)\s+-file\s+(.+)$/);
@@ -557,9 +591,10 @@ function parseConfigToSections(content) {
         } else if (['server', 'server-tls', 'server-https', 'server-quic', 'server-h3', 'server-tcp'].includes(cmd)) {
             
             // ФИКС: Ищем -group только если перед ним пробел или начало строки
-            let groupMatch = activeLine.match(/(?:\s|^)-group\s+([^\s]+)/);
+            const membership = dnsMembership(activeLine);
+            let groupMatch = membership.groups.length ? [null, membership.groups[0]] : null;
             
-            if (activeLine.includes('-bootstrap-dns')) {
+            if (membership.bootstrap) {
                 bootstrap.push(originalTrimmed);
             } else if (groupMatch) {
                 if (groupMatch[1] === 'fallback') {
@@ -578,16 +613,17 @@ function parseConfigToSections(content) {
         }
     });
 
-    let bsClean = bootstrap.map(l => cleanDns(l, ['-bootstrap-dns']));
-    let upClean = upstream.map(l => cleanDns(l, ['-exclude-default-group', '-e']));
-    let fallbackClean = fallback.map(l => cleanDns(l, ['-exclude-default-group', '-e', '-group fallback']));
+    let bsClean = bootstrap;
+    let upClean = upstream;
+    let fallbackClean = fallback;
     
     let groupsObj = {};
     group.forEach(line => {
-        let m = line.match(/(?:\s|^)-group\s+([^\s]+)/);
+        const memberships = dnsMembership(line).groups;
+        let m = memberships.length ? [null, memberships[0]] : null;
         if (m) {
             if (!groupsObj[m[1]]) groupsObj[m[1]] = [];
-            groupsObj[m[1]].push(cleanDns(line, [new RegExp(`-group\\s+${m[1]}`), '-exclude-default-group', '-e']));
+            groupsObj[m[1]].push(line);
         }
     });
 
@@ -601,7 +637,7 @@ function parseConfigToSections(content) {
             ${UI.coreCard(coreData, coreLines)}
             ${UI.card('Bootstrap DNS', 'bootstrap', bsClean, 'Закомментируйте (#) любой адрес, чтобы временно выключить его.')}
             ${UI.card('Вышестоящие DNS (Основная группа)', 'upstream', upClean, 'Серверы по умолчанию (без привязки к группам).')}
-            ${UI.card('Резервные DNS (Fallback)', 'fallback', fallbackClean, 'Автоматически получат суффикс <b>-exclude-default-group -group fallback</b>.')}
+            ${UI.card('DNS-группа fallback', 'fallback', fallbackClean, 'Это именованная группа; её название само по себе не включает автоматический резерв.')}
             ${UI.logCard(logging.level)}
         </div>
         <div class="col-md-6">
@@ -646,7 +682,8 @@ function gatherSectionsText() {
     let text = '';
     
     text += `##########\n# Основные параметры (Core) #\n##########\n`;
-    text += `bind :${document.getElementById('core-bind').value}\n`;
+    const bindValue = document.getElementById('core-bind').value.trim();
+    text += `bind ${/^\d+$/.test(bindValue) ? ':' + bindValue : bindValue}\n`;
     text += `cache-size ${document.getElementById('core-cache-size').value}\n`;
     text += `prefetch-domain ${document.getElementById('core-prefetch').checked ? 'yes' : 'no'}\n`;
     text += `serve-expired ${document.getElementById('core-serve-expired').checked ? 'yes' : 'no'}\n`;
@@ -656,7 +693,14 @@ function gatherSectionsText() {
     if (document.getElementById('speed-tcp443').checked) speed.push('tcp:443');
     if (document.getElementById('speed-tcp80').checked) speed.push('tcp:80');
     if (document.getElementById('speed-ping').checked) speed.push('ping');
-    text += `speed-check-mode ${speed.length ? speed.join(',') : 'none'}\n`;
+    const originalSpeed = document.getElementById('core-speed-original');
+    if (originalSpeed && speed.join(',') === originalSpeed.dataset.selection) {
+        if (originalSpeed.value) text += `speed-check-mode ${originalSpeed.value}\n`;
+    } else {
+        const extraModes = (originalSpeed?.value || '').split(',').filter(v => v && !['none','ping','tcp:443','tcp:80'].includes(v));
+        const modes = extraModes.concat(speed);
+        text += `speed-check-mode ${modes.length ? modes.join(',') : 'none'}\n`;
+    }
     
     const coreOthers = document.getElementById('sec-core-others').value;
     if (coreOthers.trim()) text += coreOthers.trim() + '\n';
@@ -667,11 +711,11 @@ function gatherSectionsText() {
         return editor ? editor.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : [];
     };
         const bsRows = collectDnsRows('bootstrap');
-    if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDns(line, '-bootstrap-dns') + '\n'; }); text += '\n'; }
+    if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDnsForSection(line, '', '', true) + '\n'; }); text += '\n'; }
     const upRows = collectDnsRows('upstream');
-    if (upRows.length) { text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`; upRows.forEach(line => { text += formatDns(line, '') + '\n'; }); text += '\n'; }
+    if (upRows.length) { text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`; upRows.forEach(line => { text += formatDnsForSection(line) + '\n'; }); text += '\n'; }
     const fbRows = collectDnsRows('fallback');
-    if (fbRows.length) { text += `##########\n# Резервные DNS (Fallback) #\n##########\n`; fbRows.forEach(line => { text += formatDns(line, '-exclude-default-group -group fallback') + '\n'; }); text += '\n'; }
+    if (fbRows.length) { text += `##########\n# DNS-группа fallback #\n##########\n`; fbRows.forEach(line => { text += formatDnsForSection(line, 'fallback', 'fallback') + '\n'; }); text += '\n'; }
     const grpItems = document.querySelectorAll('.group-item');
     if (grpItems.length > 0) {
         text += `##########\n# Групповые записи #\n##########\n`;
@@ -680,7 +724,7 @@ function gatherSectionsText() {
             const groupEditor = item.querySelector('.group-dns-list');
             const dnsRows = groupEditor ? groupEditor.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : [];
             if (name && dnsRows.length) {
-                dnsRows.forEach(line => { text += formatDns(line, `-exclude-default-group -group ${name}`) + '\n'; });
+                dnsRows.forEach(line => { text += formatDnsForSection(line, name, item.dataset.sourceGroup || name) + '\n'; });
             }
         });
         text += '\n';
@@ -714,7 +758,7 @@ function gatherSectionsText() {
         text += `##########\n# Локальные адреса (Статика) #\n##########\n`;
         addrItems.forEach(item => {
             let domain = item.querySelector('.addr-domain').value.trim().replace(/,/g, '');
-            let ip = item.querySelector('.addr-ip').value.trim().replace(/,/g, '');
+            let ip = item.querySelector('.addr-ip').value.trim();
             const enabled = item.querySelector('.addr-enabled')?.checked !== false;
             if (domain && ip) text += (enabled ? '' : '# ') + `address /${domain}/${ip}\n`;
         });

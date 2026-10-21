@@ -31,6 +31,9 @@ jobs:
           node --check validator.js
           node --check version.js
 
+      - name: Install test dependencies
+        run: npm ci
+
       - name: Run JavaScript regression tests when present
         run: |
           for test_file in tests/*.test.cjs; do
