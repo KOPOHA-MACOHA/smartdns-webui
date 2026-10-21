@@ -364,16 +364,50 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
     .app-main { min-width: 0; padding: 24px 28px 28px !important; }
     .app-main > .tab-content { width: 100%; max-width: 1240px !important; margin-inline: auto; }
     #settings-ui-view { max-width: 1240px !important; margin-inline: auto; }
-    .settings-subtab-panel.active {
+    /* Masonry-like independent columns in "Основное": short cards don't leave vertical holes. */
+    #settings-subtab-core.active {
+        display: block;
+        column-count: 2;
+        column-gap: 16px;
+    }
+    #settings-subtab-core.active > .card {
+        display: inline-block;
+        width: 100%;
+        min-width: 0;
+        margin: 0 0 16px !important;
+        vertical-align: top;
+        break-inside: avoid;
+    }
+    /* Keep the DNS groups section full-width, with two group cards inside each row. */
+    #settings-subtab-groups.active > .card:has(#dynamic-groups-container) {
+        width: 100%;
+        margin: 0 0 16px !important;
+    }
+    #dynamic-groups-container {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 12px;
+    }
+    #dynamic-groups-container > .group-item {
+        min-width: 0;
+        margin: 0 !important;
+        height: fit-content;
+        break-inside: avoid;
+    }
+    #dynamic-groups-container > #no-groups-msg {
+        grid-column: 1 / -1;
+    }
+    #settings-subtab-routing.active {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;
         gap: 16px;
     }
-    .settings-subtab-panel.active > .card { grid-column: auto !important; min-width: 0; margin: 0 !important; }
-    .settings-subtab-panel.active > .card:has(#dynamic-groups-container) { grid-column: 1 / -1 !important; }
-    .settings-subtab-panel.active > .card:has(#dynamic-routes-container),
-    .settings-subtab-panel.active > .card:has(#dynamic-addresses-container) { grid-column: auto !important; }
+    #settings-subtab-routing.active > .card {
+        min-width: 0;
+        margin: 0 !important;
+    }
     #settings-raw-view { height: calc(100dvh - 160px); min-height: 360px; }
     #settings-raw-view .CodeMirror { height: 100% !important; min-height: 360px; }
     #tab-lists > .row { min-height: calc(100dvh - 150px); }
@@ -390,6 +424,12 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
     #list-content, #log-content { height: calc(100dvh - 210px); min-height: 280px; }
 }
 @media (max-width: 767.98px) {
+    /* Single-column fallbacks on phones: avoid narrow cards and DNS group fields. */
+    #settings-subtab-core.active { column-count: 1; }
+    #dynamic-groups-container { grid-template-columns: minmax(0, 1fr); }
+    #dynamic-groups-container > #no-groups-msg { grid-column: 1; }
+    #settings-subtab-routing.active { display: block; }
+    #settings-subtab-routing.active > .card { width: 100%; margin-bottom: 16px !important; }
     body { font-size: 17px !important; line-height: 1.5 !important; padding-bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
     .app-main { padding: 12px 10px 22px !important; }
     .app-main > .tab-content, #settings-ui-view { width: 100%; max-width: none !important; }
