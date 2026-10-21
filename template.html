@@ -359,47 +359,81 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 .CodeMirror{height:60dvh}
 }
     
-/* Responsive follow-up: use the available desktop width and make mobile controls genuinely readable. */
+/* Responsive correction: constrained desktop canvas, viewport-height editors, readable mobile UI. */
 @media (min-width: 1100px) {
-    .app-main { padding-left: clamp(24px, 2vw, 36px) !important; padding-right: clamp(24px, 2vw, 36px) !important; }
-    .app-main > .tab-content { max-width: none !important; }
-    #settings-ui-view { max-width: none !important; }
-    .settings-subtab-panel.active { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; }
-    .settings-subtab-panel.active > .card { grid-column: span 6; min-width: 0; }
-    .settings-subtab-panel.active > .card:has(#core-bind) { grid-column: span 6; }
-    .settings-subtab-panel.active > .card:has(#dynamic-groups-container) { grid-column: 1 / -1; }
+    .app-main { min-width: 0; padding: 24px 28px 28px !important; }
+    .app-main > .tab-content { width: 100%; max-width: 1240px !important; margin-inline: auto; }
+    #settings-ui-view { max-width: 1240px !important; margin-inline: auto; }
+    .settings-subtab-panel.active {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 16px;
+    }
+    .settings-subtab-panel.active > .card { grid-column: auto !important; min-width: 0; margin: 0 !important; }
+    .settings-subtab-panel.active > .card:has(#dynamic-groups-container) { grid-column: 1 / -1 !important; }
     .settings-subtab-panel.active > .card:has(#dynamic-routes-container),
-    .settings-subtab-panel.active > .card:has(#dynamic-addresses-container) { grid-column: span 6; }
+    .settings-subtab-panel.active > .card:has(#dynamic-addresses-container) { grid-column: auto !important; }
+    #settings-raw-view { height: calc(100dvh - 160px); min-height: 360px; }
+    #settings-raw-view .CodeMirror { height: 100% !important; min-height: 360px; }
+    #tab-lists > .row { min-height: calc(100dvh - 150px); }
+    #tab-lists > .row > .col-md-9 { display: flex; flex-direction: column; min-height: calc(100dvh - 150px); }
+    #tab-lists > .row > .col-md-9 > .card { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+    #list-content { flex: 1; height: calc(100dvh - 230px); min-height: 300px; resize: vertical; }
+    #tab-logs > .card { display: flex; flex-direction: column; }
+    #log-content { height: calc(100dvh - 170px); min-height: 300px; resize: vertical; }
 }
-@media (min-width: 1500px) {
-    .settings-subtab-panel.active { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; }
-    .settings-subtab-panel.active > .card { grid-column: span 4; }
-    .settings-subtab-panel.active > .card:has(#core-bind) { grid-column: span 4; }
-    .settings-subtab-panel.active > .card:has(#dynamic-groups-container) { grid-column: 1 / -1; }
-    .settings-subtab-panel.active > .card:has(#dynamic-routes-container),
-    .settings-subtab-panel.active > .card:has(#dynamic-addresses-container) { grid-column: span 6; }
+@media (min-width: 768px) and (max-width: 1099.98px) {
+    .app-main > .tab-content { max-width: 980px; margin-inline: auto; }
+    #settings-raw-view { height: calc(100dvh - 170px); min-height: 340px; }
+    #settings-raw-view .CodeMirror { height: 100% !important; min-height: 340px; }
+    #list-content, #log-content { height: calc(100dvh - 210px); min-height: 280px; }
 }
 @media (max-width: 767.98px) {
-    body { font-size: 17px !important; line-height: 1.5 !important; }
-    .app-main { padding: 14px 10px 24px !important; }
-    .settings-subnav { gap: 8px; padding-bottom: 12px; }
-    .settings-subnav .nav-link { min-height: 48px; padding: 12px 15px; font-size: 16px !important; }
-    .settings-subtab-panel > .card { margin-bottom: 16px !important; border-radius: 14px !important; }
-    .settings-subtab-panel .card-header { padding: 15px 14px !important; gap: 10px; }
+    body { font-size: 17px !important; line-height: 1.5 !important; padding-bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
+    .app-main { padding: 12px 10px 22px !important; }
+    .app-main > .tab-content, #settings-ui-view { width: 100%; max-width: none !important; }
+    .app-topbar .navbar-brand { font-size: 17px !important; }
+    .app-topbar .btn { min-height: 42px !important; }
+    .app-sidebar .nav-pills .nav-link { min-height: 60px !important; font-size: 13px !important; }
+    .app-sidebar .nav-pills .nav-link .bi { font-size: 22px !important; }
+    #tab-settings > .d-flex { gap: 8px !important; }
+    #tab-settings > .d-flex .btn { min-height: 48px !important; padding: 10px 8px !important; font-size: 15px !important; }
+    .settings-subnav { gap: 8px !important; }
+    .settings-subnav .nav-link { min-height: 48px !important; padding: 11px 15px !important; font-size: 16px !important; }
+    .settings-subtab-panel > .card { margin-bottom: 16px !important; border-radius: 13px !important; }
+    .settings-subtab-panel .card-header { padding: 15px 13px !important; }
     .settings-subtab-panel .section-header { font-size: 17px !important; line-height: 1.4; }
     .settings-subtab-panel .card-body { padding: 14px !important; }
     .settings-subtab-panel .form-label,
-    .settings-subtab-panel .form-check-label { font-size: 16px !important; line-height: 1.45; }
+    .settings-subtab-panel .form-check-label,
+    .settings-section-hint { font-size: 16px !important; line-height: 1.45; }
     .settings-subtab-panel .form-control,
     .settings-subtab-panel .form-select,
-    .settings-subtab-panel textarea { min-height: 48px; font-size: 17px !important; }
-    .settings-subtab-panel .btn { min-height: 46px; padding: 10px 12px; font-size: 15px; }
-    .settings-subtab-panel .btn-sm { min-height: 42px; font-size: 14px; }
-    .settings-subtab-panel .settings-section-hint { font-size: 14px; line-height: 1.45; }
+    .settings-subtab-panel textarea,
+    #new-list-name { min-height: 50px !important; font-size: 17px !important; }
+    .settings-subtab-panel .btn { min-height: 46px !important; padding: 10px 12px !important; font-size: 15px !important; }
+    .settings-subtab-panel .btn-sm { min-height: 44px !important; font-size: 15px !important; }
     .settings-subtab-panel .group-item,
     .settings-subtab-panel .route-item { padding: 14px !important; }
-    .app-sidebar .nav-pills .nav-link { min-height: 58px; font-size: 12px !important; }
-    .app-sidebar .nav-pills .nav-link .bi { font-size: 21px; }
+    #tab-lists > .row { display: flex; flex-direction: column; gap: 12px; }
+    #tab-lists > .row > [class*="col-"] { width: 100%; }
+    #lists-container { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; }
+    #lists-container .list-group-item { flex: 0 0 auto; padding: 12px 14px; font-size: 16px; }
+    #tab-lists .card-header { gap: 8px; padding: 13px !important; font-size: 16px; }
+    #tab-lists .card-header .btn { min-height: 44px; font-size: 14px; }
+    #list-content, #log-content, #raw-config-text {
+        width: 100%; max-width: 100%; font-size: 15px !important; line-height: 1.5;
+        min-height: 55dvh; height: 55dvh; resize: vertical;
+    }
+    .CodeMirror { height: 62dvh !important; min-height: 320px; font-size: 15px !important; }
+    #settings-raw-view { min-height: 0; }
+    #settings-raw-view .CodeMirror { height: 62dvh !important; }
+    #tab-logs > .card { min-width: 0; }
+    #tab-logs .card-header { flex-wrap: wrap; gap: 8px; padding: 12px !important; }
+    #tab-logs .card-header .btn { min-height: 44px; font-size: 14px; }
+    .modal-dialog { margin: 8px; }
+    .modal-content { max-height: calc(100dvh - 16px); overflow-y: auto; }
 }
 
 </style>
