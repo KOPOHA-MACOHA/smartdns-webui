@@ -51,6 +51,15 @@
         .group-item, .route-item { padding: 14px !important; margin-bottom: 12px !important; background: var(--surface) !important; border: 1px solid var(--line) !important; border-radius: 10px !important; box-shadow: var(--shadow); }
         .group-item + .group-item, .route-item + .route-item { margin-top: 0; }
         .form-control, .form-select { min-height: 36px; background: var(--field) !important; color: var(--text) !important; border: 1px solid var(--field-border) !important; border-radius: 7px !important; box-shadow: none; }
+        /* The background shorthand above resets Bootstrap's native select arrow; restore a visible chevron. */
+        .form-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23aab7c4' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 6 5 5 5-5'/%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important;
+            background-position: right .65rem center !important;
+            background-size: 16px 12px !important;
+            padding-right: 2.25rem !important;
+        }
+        .form-select:disabled { opacity: .65; cursor: not-allowed; }
         .form-control:focus, .form-select:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 17%, transparent) !important; }
         .form-control::placeholder { color: var(--muted) !important; opacity: .8; }
         .form-check-input { background-color: var(--field); border-color: var(--field-border); }
