@@ -358,7 +358,51 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 #lists-container{display:flex;flex-direction:row;gap:6px;overflow-x:auto}#lists-container .list-group-item{flex:0 0 auto;border-radius:8px}
 .CodeMirror{height:60dvh}
 }
-    </style>
+    
+/* Responsive follow-up: use the available desktop width and make mobile controls genuinely readable. */
+@media (min-width: 1100px) {
+    .app-main { padding-left: clamp(24px, 2vw, 36px) !important; padding-right: clamp(24px, 2vw, 36px) !important; }
+    .app-main > .tab-content { max-width: none !important; }
+    #settings-ui-view { max-width: none !important; }
+    .settings-subtab-panel.active { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 18px; }
+    .settings-subtab-panel.active > .card { grid-column: span 6; min-width: 0; }
+    .settings-subtab-panel.active > .card:has(#core-bind) { grid-column: span 6; }
+    .settings-subtab-panel.active > .card:has(#dynamic-groups-container) { grid-column: 1 / -1; }
+    .settings-subtab-panel.active > .card:has(#dynamic-routes-container),
+    .settings-subtab-panel.active > .card:has(#dynamic-addresses-container) { grid-column: span 6; }
+}
+@media (min-width: 1500px) {
+    .settings-subtab-panel.active { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; }
+    .settings-subtab-panel.active > .card { grid-column: span 4; }
+    .settings-subtab-panel.active > .card:has(#core-bind) { grid-column: span 4; }
+    .settings-subtab-panel.active > .card:has(#dynamic-groups-container) { grid-column: 1 / -1; }
+    .settings-subtab-panel.active > .card:has(#dynamic-routes-container),
+    .settings-subtab-panel.active > .card:has(#dynamic-addresses-container) { grid-column: span 6; }
+}
+@media (max-width: 767.98px) {
+    body { font-size: 17px !important; line-height: 1.5 !important; }
+    .app-main { padding: 14px 10px 24px !important; }
+    .settings-subnav { gap: 8px; padding-bottom: 12px; }
+    .settings-subnav .nav-link { min-height: 48px; padding: 12px 15px; font-size: 16px !important; }
+    .settings-subtab-panel > .card { margin-bottom: 16px !important; border-radius: 14px !important; }
+    .settings-subtab-panel .card-header { padding: 15px 14px !important; gap: 10px; }
+    .settings-subtab-panel .section-header { font-size: 17px !important; line-height: 1.4; }
+    .settings-subtab-panel .card-body { padding: 14px !important; }
+    .settings-subtab-panel .form-label,
+    .settings-subtab-panel .form-check-label { font-size: 16px !important; line-height: 1.45; }
+    .settings-subtab-panel .form-control,
+    .settings-subtab-panel .form-select,
+    .settings-subtab-panel textarea { min-height: 48px; font-size: 17px !important; }
+    .settings-subtab-panel .btn { min-height: 46px; padding: 10px 12px; font-size: 15px; }
+    .settings-subtab-panel .btn-sm { min-height: 42px; font-size: 14px; }
+    .settings-subtab-panel .settings-section-hint { font-size: 14px; line-height: 1.45; }
+    .settings-subtab-panel .group-item,
+    .settings-subtab-panel .route-item { padding: 14px !important; }
+    .app-sidebar .nav-pills .nav-link { min-height: 58px; font-size: 12px !important; }
+    .app-sidebar .nav-pills .nav-link .bi { font-size: 21px; }
+}
+
+</style>
 </head>
 <body>
 
