@@ -285,13 +285,346 @@
             .settings-subtab-panel .address-item .dns-enabled-control { grid-column:auto; grid-row:auto; flex-basis:28px; width:28px; min-height:32px; }
             .settings-subtab-panel .route-file-row { display:flex; }
         }
-    </style>
+
+/* Responsive application shell: keep Bootstrap controls, own the page layout. */
+.app-topbar{min-height:62px;padding:0 clamp(14px,2.2vw,32px)!important;display:flex;align-items:center;z-index:100;border-bottom:1px solid var(--line)!important;box-shadow:0 5px 18px rgba(20,42,64,.035)}
+.app-topbar>.container-fluid{display:flex;align-items:center;gap:18px;min-height:62px;padding:0!important}
+.app-topbar .navbar-brand{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:18px;font-weight:750!important;letter-spacing:-.45px;white-space:nowrap}
+.app-topbar .navbar-brand:before{display:none}
+.app-brand-mark{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);font-size:19px}
+.app-brand-name{display:inline-flex;align-items:baseline}
+.app-topbar-caption{padding-left:18px;border-left:1px solid var(--line);color:var(--muted);font-size:13px;white-space:nowrap}
+.app-topbar .btn-outline-secondary{border-color:var(--line);color:var(--text)}
+.app-topbar .btn-outline-secondary:hover{background:var(--surface-muted)}
+.app-topbar .d-flex{gap:8px!important}.app-topbar .btn{min-height:36px}
+.app-shell{padding:0!important;max-width:none}
+.app-layout{display:grid!important;grid-template-columns:minmax(0,1fr);margin:0!important;min-height:calc(100vh - 62px)}
+.app-sidebar{width:auto;min-width:0;min-height:0;padding:22px 14px!important;border-right:1px solid var(--line)!important;border-bottom:0!important;background:var(--surface)!important}
+.app-sidebar .nav{display:flex;flex-direction:column!important;gap:5px}
+.app-sidebar .nav-pills .nav-link{min-height:44px;padding:11px 13px;margin:0;border-radius:9px;gap:8px;font-weight:550}
+.app-sidebar .nav-pills .nav-link.active{box-shadow:inset 3px 0 var(--accent)}
+.app-main{width:auto;min-width:0;max-width:none;padding:clamp(18px,2.5vw,36px) clamp(16px,2.8vw,44px) 42px!important}
+.app-main>.tab-content{width:100%;max-width:1400px;margin-inline:auto}
+#settings-ui-view{width:100%;max-width:none}#settings-raw-view,#tab-lists,#tab-logs{min-width:0}
+#tab-settings>.d-flex{align-items:center;flex-wrap:wrap}
+.settings-subnav{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 14px;margin:0 0 18px;border-bottom:1px solid var(--line)}
+.settings-subnav .nav-link{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 14px;border:1px solid transparent;border-radius:9px;color:var(--muted);background:transparent;font-weight:600;white-space:nowrap}
+.settings-subnav .nav-link.active{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 25%,var(--line))}
+.settings-subtab-panel.active{display:block}.settings-subtab-panel>.card{min-width:0;margin-bottom:18px!important}
+.settings-subtab-panel .card-header{gap:10px}#tab-lists>.row{--bs-gutter-x:18px;row-gap:12px}
+#tab-lists .col-md-3,#tab-lists .col-md-9{min-width:0}#list-content,#log-content{width:100%;max-width:100%}
+@media(min-width:768px) and (max-width:1099.98px){
+.app-layout{display:block!important}.app-sidebar{width:100%;padding:8px 16px!important;border-right:0!important;border-bottom:1px solid var(--line)!important}
+.app-sidebar>.text-uppercase,.app-sidebar>.px-3.mt-4{display:none}.app-sidebar .nav{display:flex!important;flex-direction:row!important;gap:6px;max-width:900px;margin:0 auto}
+.app-sidebar .nav-link{flex:1 1 0;justify-content:center}.app-main{padding:24px clamp(18px,3vw,36px) 36px!important}.app-main>.tab-content{max-width:1100px}
+}
+@media(min-width:1100px){
+.app-layout{grid-template-columns:248px minmax(0,1fr);align-items:stretch}
+.app-sidebar{position:sticky;top:62px;height:calc(100vh - 62px);overflow-y:auto;align-self:start}
+.app-sidebar>.text-uppercase{padding-left:12px!important}.app-main>.tab-content{max-width:1440px}
+.settings-subtab-panel.active{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:18px}
+.settings-subtab-panel.active>.card{margin:0!important}
+.settings-subtab-panel.active>.card:has(#dynamic-groups-container),.settings-subtab-panel.active>.card:has(.group-item),.settings-subtab-panel.active>.card:has(.route-item),.settings-subtab-panel.active>.card:has(.address-item){grid-column:1/-1}
+#tab-lists>.row{align-items:start}#tab-lists>.row>.col-md-3{width:28%}#tab-lists>.row>.col-md-9{width:72%}
+}
+@media(max-width:767.98px){
+body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+.app-topbar{min-height:56px;padding:6px 12px!important}.app-topbar>.container-fluid{min-height:44px;gap:8px}
+.app-topbar .navbar-brand{font-size:16px}.app-brand-mark{width:32px;height:32px;border-radius:9px;font-size:17px}.app-topbar-caption{display:none}
+.app-topbar>.container-fluid>.d-flex{flex-wrap:nowrap;gap:5px!important;margin-left:auto}
+.app-topbar #btn-update{margin:0!important;min-height:36px;padding:6px 8px;font-size:11px}
+.app-topbar #test-mode-toggle,.app-topbar .form-check{display:none}
+            .app-topbar #btn-update{flex:0 0 auto}
+            .app-topbar #btn-update .bi{margin:0!important}
+            .app-topbar #btn-update{font-size:0}
+            .app-topbar #btn-update .bi{font-size:14px}
+            .app-topbar #current-version-text{display:none}
+.app-topbar #global-save-btn{min-width:38px;min-height:38px;padding:7px;font-size:0}.app-topbar #global-save-btn .bi{margin:0!important;font-size:16px}
+.app-topbar #theme-toggle,.app-topbar .btn-warning{min-width:36px;min-height:36px;padding:6px}
+.app-topbar .btn-warning{font-size:0}.app-topbar .btn-warning .bi{font-size:16px;margin:0!important}
+.app-layout{display:block!important;min-height:auto}
+.app-sidebar{position:fixed;z-index:90;left:0;right:0;bottom:0;width:100%;min-height:0;padding:5px 8px calc(5px + env(safe-area-inset-bottom))!important;border:0!important;border-top:1px solid var(--line)!important;box-shadow:0 -5px 20px rgba(20,42,64,.07);background:var(--surface)!important}
+.app-sidebar>.text-uppercase,.app-sidebar>.px-3.mt-4{display:none}
+.app-sidebar .nav{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;flex-direction:row!important;max-width:560px;margin:0 auto}
+.app-sidebar .nav-pills .nav-link{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;min-height:54px;padding:5px 3px;border-radius:8px;font-size:11px;line-height:1.15;white-space:normal}
+.app-sidebar .nav-pills .nav-link .bi{margin:0!important;font-size:19px}.app-sidebar .nav-pills .nav-link.active{box-shadow:none;background:var(--accent-soft)}
+.app-main{width:100%;padding:16px 12px 24px!important}.app-main>.tab-content{max-width:100%}
+#tab-settings>.d-flex{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px!important}
+#tab-settings>.d-flex .btn{min-height:42px;padding:8px 7px;font-size:13px}
+.settings-subnav{position:sticky;top:0;z-index:10;flex-wrap:nowrap;overflow-x:auto;margin:0 -2px 14px;padding:6px 2px 10px;background:var(--page);scrollbar-width:thin}
+.settings-subnav .nav-link{flex:0 0 auto;min-height:42px;padding:9px 12px;font-size:13px}
+.settings-subtab-panel.active{display:block}.settings-subtab-panel>.card{margin-bottom:14px!important}
+#tab-lists>.row{display:flex;flex-direction:column;gap:10px}#tab-lists>.row>[class*="col-"]{width:100%}
+#lists-container{display:flex;flex-direction:row;gap:6px;overflow-x:auto}#lists-container .list-group-item{flex:0 0 auto;border-radius:8px}
+.CodeMirror{height:60dvh}
+}
+    
+/* Responsive correction: constrained desktop canvas, viewport-height editors, readable mobile UI. */
+@media (min-width: 1100px) {
+    .app-main { min-width: 0; padding: 24px 28px 28px !important; }
+    .app-main > .tab-content { width: 100%; max-width: 1240px !important; margin-inline: auto; }
+    #settings-ui-view { max-width: 1240px !important; margin-inline: auto; }
+    /* Masonry-like independent columns in "Основное": short cards don't leave vertical holes. */
+    #settings-subtab-core.active {
+        display: block;
+        column-count: 2;
+        column-gap: 16px;
+    }
+    #settings-subtab-core.active > .card {
+        display: inline-block;
+        width: 100%;
+        min-width: 0;
+        margin: 0 0 16px !important;
+        vertical-align: top;
+        break-inside: avoid;
+    }
+    /* Keep the DNS groups section full-width, with two group cards inside each row. */
+    #settings-subtab-groups.active > .card:has(#dynamic-groups-container) {
+        width: 100%;
+        margin: 0 0 16px !important;
+    }
+    #dynamic-groups-container {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 12px;
+    }
+    #dynamic-groups-container > .group-item {
+        min-width: 0;
+        margin: 0 !important;
+        height: fit-content;
+        break-inside: avoid;
+    }
+    #dynamic-groups-container > #no-groups-msg {
+        grid-column: 1 / -1;
+    }
+    #settings-subtab-routing.active {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 16px;
+    }
+    #settings-subtab-routing.active > .card {
+        min-width: 0;
+        margin: 0 !important;
+    }
+    #settings-raw-view { height: calc(100dvh - 160px); min-height: 360px; }
+    #settings-raw-view .CodeMirror { height: 100% !important; min-height: 360px; }
+    #tab-lists > .row { min-height: calc(100dvh - 150px); }
+    #tab-lists > .row > .col-md-9 { display: flex; flex-direction: column; min-height: calc(100dvh - 150px); }
+    #tab-lists > .row > .col-md-9 > .card { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+    #list-content { flex: 1; height: calc(100dvh - 230px); min-height: 300px; resize: vertical; }
+    #tab-logs > .card { display: flex; flex-direction: column; }
+    #log-content { height: calc(100dvh - 170px); min-height: 300px; resize: vertical; }
+}
+@media (min-width: 768px) and (max-width: 1099.98px) {
+    .app-main > .tab-content { max-width: 980px; margin-inline: auto; }
+    #settings-raw-view { height: calc(100dvh - 170px); min-height: 340px; }
+    #settings-raw-view .CodeMirror { height: 100% !important; min-height: 340px; }
+    #list-content, #log-content { height: calc(100dvh - 210px); min-height: 280px; }
+}
+@media (max-width: 767.98px) {
+    /* Single-column fallbacks on phones: avoid narrow cards and DNS group fields. */
+    #settings-subtab-core.active { column-count: 1; }
+    #dynamic-groups-container { grid-template-columns: minmax(0, 1fr); }
+    #dynamic-groups-container > #no-groups-msg { grid-column: 1; }
+    #settings-subtab-routing.active { display: block; }
+    #settings-subtab-routing.active > .card { width: 100%; margin-bottom: 16px !important; }
+    body { font-size: 17px !important; line-height: 1.5 !important; padding-bottom: calc(78px + env(safe-area-inset-bottom)) !important; }
+    .app-main { padding: 12px 10px 22px !important; }
+    .app-main > .tab-content, #settings-ui-view { width: 100%; max-width: none !important; }
+    .app-topbar .navbar-brand { font-size: 17px !important; }
+    .app-topbar .btn { min-height: 42px !important; }
+    .app-sidebar .nav-pills .nav-link { min-height: 60px !important; font-size: 13px !important; }
+    .app-sidebar .nav-pills .nav-link .bi { font-size: 22px !important; }
+    #tab-settings > .d-flex { gap: 8px !important; }
+    #tab-settings > .d-flex .btn { min-height: 48px !important; padding: 10px 8px !important; font-size: 15px !important; }
+    .settings-subnav { gap: 8px !important; }
+    .settings-subnav .nav-link { min-height: 48px !important; padding: 11px 15px !important; font-size: 16px !important; }
+    .settings-subtab-panel > .card { margin-bottom: 16px !important; border-radius: 13px !important; }
+    .settings-subtab-panel .card-header { padding: 15px 13px !important; }
+    .settings-subtab-panel .section-header { font-size: 17px !important; line-height: 1.4; }
+    .settings-subtab-panel .card-body { padding: 14px !important; }
+    .settings-subtab-panel .form-label,
+    .settings-subtab-panel .form-check-label,
+    .settings-section-hint { font-size: 16px !important; line-height: 1.45; }
+    .settings-subtab-panel .form-control,
+    .settings-subtab-panel .form-select,
+    .settings-subtab-panel textarea,
+    #new-list-name { min-height: 50px !important; font-size: 17px !important; }
+    .settings-subtab-panel .btn { min-height: 46px !important; padding: 10px 12px !important; font-size: 15px !important; }
+    .settings-subtab-panel .btn-sm { min-height: 44px !important; font-size: 15px !important; }
+    .settings-subtab-panel .group-item,
+    .settings-subtab-panel .route-item { padding: 14px !important; }
+    #tab-lists > .row { display: flex; flex-direction: column; gap: 12px; }
+    #tab-lists > .row > [class*="col-"] { width: 100%; }
+    #lists-container { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; }
+    #lists-container .list-group-item { flex: 0 0 auto; padding: 12px 14px; font-size: 16px; }
+    #tab-lists .card-header { gap: 8px; padding: 13px !important; font-size: 16px; }
+    #tab-lists .card-header .btn { min-height: 44px; font-size: 14px; }
+    #list-content, #log-content, #raw-config-text {
+        width: 100%; max-width: 100%; font-size: 15px !important; line-height: 1.5;
+        min-height: 55dvh; height: 55dvh; resize: vertical;
+    }
+    .CodeMirror { height: 62dvh !important; min-height: 320px; font-size: 15px !important; }
+    #settings-raw-view { min-height: 0; }
+    #settings-raw-view .CodeMirror { height: 62dvh !important; }
+    #tab-logs > .card { min-width: 0; }
+    #tab-logs .card-header { flex-wrap: wrap; gap: 8px; padding: 12px !important; }
+    #tab-logs .card-header .btn { min-height: 44px; font-size: 14px; }
+    .modal-dialog { margin: 8px; }
+    .modal-content { max-height: calc(100dvh - 16px); overflow-y: auto; }
+}
+
+
+/* Follow-up: independent settings columns and mobile control fixes. */
+@media (min-width: 1100px) {
+    /* Keep each column flowing independently instead of aligning cards to the tallest row. */
+    #settings-subtab-core.active {
+        display: block !important;
+        column-count: 2;
+        column-gap: 16px;
+    }
+    #settings-subtab-core.active > .card {
+        display: inline-block;
+        min-width: 0;
+        width: 100%;
+        margin: 0 0 16px !important;
+        vertical-align: top;
+        break-inside: avoid;
+    }
+    #settings-subtab-groups.active > .card:has(#dynamic-groups-container) {
+        width: 100%;
+    }
+    #dynamic-groups-container {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 767.98px) {
+    /* Bootstrap's switch needs its native wide track; generic mobile sizing made it circular. */
+    .settings-subtab-panel .form-switch {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 10px !important;
+        min-height: 42px;
+        width: 100%;
+    }
+    .settings-subtab-panel .form-switch .form-check-input {
+        float: none !important;
+        flex: 0 0 2.5em !important;
+        width: 2.5em !important;
+        min-width: 2.5em !important;
+        height: 1.25em !important;
+        min-height: 1.25em !important;
+        margin: 0 !important;
+        border-radius: 2em !important;
+        background-position: left center;
+        appearance: none;
+        -webkit-appearance: none;
+    }
+    .settings-subtab-panel .form-switch .form-check-input:checked {
+        background-position: right center;
+    }
+    .settings-subtab-panel .form-switch .form-check-label {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    /* Logs should use most of the available phone height, while leaving room for the header and bottom nav. */
+    #tab-logs > .card { display: flex; flex-direction: column; }
+    #tab-logs #log-content {
+        height: calc(100dvh - 205px) !important;
+        min-height: 60dvh !important;
+        max-height: none;
+        flex: 1 1 auto;
+        resize: vertical;
+    }
+    /* Long filenames should not make the horizontal list selector consume the screen. */
+    #lists-container .list-group-item {
+        flex: 0 0 auto;
+        width: min(48vw, 190px);
+        max-width: min(48vw, 190px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+
+/* Follow-up: compact switch rows on phones and independent item columns on desktop. */
+@media (min-width: 1100px) {
+    /* Masonry-style columns: expanding one group won't push items in the other column down. */
+    #dynamic-groups-container,
+    #dynamic-routes-container {
+        display: block !important;
+        column-count: 2;
+        column-gap: 12px;
+    }
+    #dynamic-groups-container > .group-item,
+    #dynamic-routes-container > .route-item {
+        display: inline-block;
+        width: 100%;
+        min-width: 0;
+        margin: 0 0 12px !important;
+        vertical-align: top;
+        break-inside: avoid;
+    }
+    #dynamic-groups-container > #no-groups-msg,
+    #dynamic-routes-container > #no-route-msg {
+        display: block;
+        column-span: all;
+    }
+    /* Two columns for routing cards as well, independently of the item lists above. */
+    #settings-subtab-routing.active {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 16px;
+    }
+    #settings-subtab-routing.active > .card {
+        width: auto;
+        min-width: 0;
+        margin: 0 !important;
+    }
+}
+@media (max-width: 767.98px) {
+    /* The labels and switch controls share one row in Core settings. */
+    #settings-subtab-core .row.mb-3.align-items-center:has(.form-switch) {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto !important;
+        align-items: center !important;
+        column-gap: 12px !important;
+    }
+    #settings-subtab-core .row.mb-3.align-items-center:has(.form-switch) > [class*="col-"] {
+        width: auto !important;
+        min-width: 0;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    #settings-subtab-core .row.mb-3.align-items-center:has(.form-switch) > [class*="col-"]:last-child {
+        justify-self: end;
+    }
+    #settings-subtab-core .form-switch {
+        width: auto !important;
+        min-height: 32px !important;
+        justify-content: flex-end;
+    }
+    #settings-subtab-core .form-switch .form-check-input {
+        margin: 0 !important;
+    }
+}
+
+</style>
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary sticky-top">
+<nav class="navbar app-topbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary sticky-top">
     <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="javascript:void(0);" onclick="resetToHome()">SmartDNS<span class="text-primary">Geo</span></a>
+        <a class="navbar-brand fw-bold app-brand" href="javascript:void(0);" onclick="resetToHome()">
+            <span class="app-brand-mark" aria-hidden="true"><i class="bi bi-hdd-network"></i></span>
+            <span class="app-brand-name">SmartDNS<span class="text-primary">Geo</span></span>
+        </a>
+        <span class="app-topbar-caption">Панель управления DNS</span>
         
         <div class="d-flex align-items-center ms-auto gap-2">
             <!-- Кнопка обновления (всегда видима) -->
@@ -315,9 +648,9 @@
     </div>
 </nav>
 
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-md-2 sidebar border-end border-secondary p-0">
+<div class="container-fluid app-shell">
+    <div class="row app-layout">
+        <aside class="col-md-2 sidebar app-sidebar border-end border-secondary p-0" aria-label="Основная навигация">
             <div class="text-uppercase text-muted small px-3 mb-2 fw-bold">Меню</div>
             <div class="nav flex-column nav-pills">
                 <a class="nav-link active" onclick="switchTab('settings', this)"><i class="bi bi-gear me-2"></i> Настройки</a>
@@ -329,9 +662,9 @@
                 Ctrl+S - Сохранить<br>
                 Ctrl+/ - Коммент (#)
             </div>
-        </div>
+        </aside>
 
-        <div class="col-md-10 p-4">
+        <main class="col-md-10 app-main p-4">
             <div id="tab-settings" class="tab-content active">
                 <div class="d-flex mb-3 gap-2">
                     <button id="btn-mode-ui" class="btn btn-sm btn-primary" onclick="switchSettingsMode('ui')">Визуальный режим</button>
@@ -379,7 +712,7 @@
                     <textarea id="log-content" class="form-control code-font border-0 rounded-0" rows="25" readonly></textarea>
                 </div>
             </div>
-        </div>
+        </main>
     </div>
 </div>
 
