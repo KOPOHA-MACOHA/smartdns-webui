@@ -753,24 +753,43 @@ async function loadLog() {
 }
 
 document.addEventListener('click', (e) => {
-    if (activeTab === 'settings' && currentSettingsMode === 'ui' &&
-        e.target.closest('#config-sections')) {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
+        !e.target.closest('#config-sections')) return;
+
+    // Structural actions do not fire input/change events, so save the DOM before
+    // adding/removing a route, DNS group, or route-list row.
+    const action = e.target.closest('button[onclick]');
+    const handler = action?.getAttribute('onclick') || '';
+    const changesStructure = /addNewGroupUI|addNewRouteUI|addRouteFileUI|\.closest\('\.(?:group-item|route-item|route-file-row)'\)\.remove\(\)/.test(handler);
+    if (changesStructure) {
         commitPendingSettingsEdit();
+        const before = captureSettingsSnapshot();
+        if (before && (!settingsUndoHistory.lastSnapshot ||
+            !settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, before))) {
+            settingsUndoHistory.lastSnapshot = before;
+        }
+        if (before) pushSettingsUndo(before);
+        settingsUndoHistory.lastSnapshot = before;
+        return;
     }
+
+    commitPendingSettingsEdit();
 }, true);
 
-// Capture select changes before inline onchange handlers update their data-* attributes.
+// Select values have already changed when the change event fires. Store the last
+// known pre-change snapshot, then advance the baseline immediately.
 document.addEventListener('change', (e) => {
     if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
         !e.target || e.target.tagName !== 'SELECT' ||
         !e.target.closest('#config-sections')) return;
     const current = captureSettingsSnapshot();
-    if (!current || !settingsUndoHistory.lastSnapshot ||
-        settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, current)) return;
-    if (!settingsUndoHistory.pending) {
-        pushSettingsUndo(settingsUndoHistory.lastSnapshot);
-        settingsUndoHistory.pending = true;
-    }
+    const previous = settingsUndoHistory.lastSnapshot;
+    if (!current || !previous || settingsSnapshotsEqual(previous, current)) return;
+    if (!settingsUndoHistory.pending) pushSettingsUndo(previous);
+    settingsUndoHistory.pending = false;
+    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
+    settingsUndoHistory.timer = null;
+    settingsUndoHistory.lastSnapshot = current;
 }, true);
 
 document.addEventListener('keydown', (e) => {
