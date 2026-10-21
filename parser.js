@@ -84,11 +84,9 @@ const UI = {
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
         const body = dnsSection
-            ? '<div id="sec-' + id + '" class="dns-server-list">' + (linesArr.map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">DNS-серверы не добавлены</div>') + '</div>'
-            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\n')) + '</textarea>';
-        return '<div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>' + title + '</span>' +
-            (dnsSection ? '<button type="button" class="btn btn-sm btn-primary" onclick="openDnsModal(document.getElementById(\'sec-' + id + '\'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>' : '') +
-            '</div><div class="card-body p-0">' + (notice ? '<div class="p-2 text-muted small border-bottom">' + notice + '</div>' : '') + body + '</div></div>';
+            ? '<textarea id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.join('\\n')) + '</textarea>'
+            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\\n')) + '</textarea>';
+        return '<div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>' + title + '</span></div><div class="card-body p-0">' + (notice ? '<div class="p-2 text-muted small border-bottom">' + notice + '</div>' : '') + body + '</div></div>';
     },
     logCard: (level) => `
         <div class="card bg-dark border-secondary mb-3 shadow-sm">
@@ -156,12 +154,7 @@ const UI = {
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
             <div class="group-body">
-                <div class="group-dns-list dns-server-list">
-                    ${(content || '').split(/\r?\n/).filter(line => line.trim()).map(line => UI.dnsServerRow(line)).join('') || '<div class="dns-empty">В этой группе пока нет DNS-серверов</div>'}
-                </div>
-                <div class="d-flex justify-content-end mt-2">
-                    <button class="btn btn-sm btn-primary" type="button" onclick="openDnsModal(this.closest('.group-item'))"><i class="bi bi-plus-lg me-1"></i>Добавить DNS</button>
-                </div>
+                <textarea class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\\r?\\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape(content || '')}</textarea>
             </div>
         </div>`,
     coreCard: (data, rawLines) => `
@@ -653,13 +646,11 @@ function gatherSectionsText() {
     if (coreOthers.trim()) text += coreOthers.trim() + '\n';
     text += '\n';
 
-    const serializeDnsRow = input => {
-        const value = input.value.trim().replace(/^#+\s*/, '');
-        const enabled = input.closest('.dns-server-row')?.querySelector('.dns-enabled')?.checked !== false;
-        return value ? (enabled ? value : '# ' + value) : '';
+    const collectDnsRows = id => {
+        const editor = document.getElementById('sec-' + id);
+        return editor ? editor.value.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean) : [];
     };
-    const collectDnsRows = id => Array.from(document.querySelectorAll('#sec-' + id + ' .dns-value')).map(serializeDnsRow).filter(Boolean);
-    const bsRows = collectDnsRows('bootstrap');
+        const bsRows = collectDnsRows('bootstrap');
     if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDns(line, '-bootstrap-dns') + '\n'; }); text += '\n'; }
     const upRows = collectDnsRows('upstream');
     if (upRows.length) { text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`; upRows.forEach(line => { text += formatDns(line, '') + '\n'; }); text += '\n'; }
@@ -670,7 +661,8 @@ function gatherSectionsText() {
         text += `##########\n# Групповые записи #\n##########\n`;
         grpItems.forEach(item => {
             let name = item.querySelector('.group-name-input').value.trim();
-            const dnsRows = Array.from(item.querySelectorAll('.dns-value')).map(serializeDnsRow).filter(Boolean);
+            const groupEditor = item.querySelector('.group-dns-list');
+            const dnsRows = groupEditor ? groupEditor.value.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean) : [];
             if (name && dnsRows.length) {
                 dnsRows.forEach(line => { text += formatDns(line, `-exclude-default-group -group ${name}`) + '\n'; });
             }
