@@ -352,6 +352,7 @@ function switchSettingsMode(mode) {
     }
     
     currentSettingsMode = mode;
+    resetSettingsUndoHistory();
     updateSaveButtonState();
 }
 
@@ -558,6 +559,7 @@ async function loadConfig() {
     if (currentSettingsMode === 'raw') {
         document.getElementById('raw-config-text').value = content;
     }
+    resetSettingsUndoHistory();
     updateSaveButtonState();
     
     setTimeout(() => {
