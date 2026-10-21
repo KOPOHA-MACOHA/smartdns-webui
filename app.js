@@ -758,11 +758,11 @@ function toggleCommentRaw(cm) {
     const allCommented = lines.every(line => line.trim() === '' || line.trim().startsWith('#'));
     const updated = lines.map(line => {
         if (line.trim() === '') return line;
-        return allCommented ? line.replace(/^(\\s*)#\\s?/, '$1') : '#' + line;
+        return allCommented ? line.replace(/^(\s*)#\s?/, '$1') : '#' + line;
     });
 
     cm.operation(() => {
-        cm.replaceRange(updated.join('\\n'), { line: firstLine, ch: 0 }, {
+        cm.replaceRange(updated.join('\n'), { line: firstLine, ch: 0 }, {
             line: lastLine,
             ch: cm.getLine(lastLine).length
         });
