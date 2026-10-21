@@ -407,6 +407,22 @@ window.addEventListener('popstate', (e) => {
 
 // === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
 async function validateConfigLogical(text) {
+    if (currentSettingsMode === 'ui') {
+        const definedGroups = new Set(Array.from(document.querySelectorAll('.group-name-input'))
+            .map(input => input.value.trim()).filter(Boolean));
+        for (const [index, item] of Array.from(document.querySelectorAll('.route-item')).entries()) {
+            const routeName = item.querySelector('.route-name')?.value.trim() || '';
+            const group = item.querySelector('.route-group')?.value.trim() || '';
+            const fileSelects = Array.from(item.querySelectorAll('.route-file-select'));
+            const files = fileSelects.map(select => select.value.trim());
+            if (!routeName) return `Маршрут №${index + 1}: укажите имя набора или удалите незаполненный маршрут.`;
+            if (!group) return `Маршрут "${routeName}": выберите DNS-группу.`;
+            if (!definedGroups.has(group)) return `Маршрут "${routeName}": DNS-группа "${group}" не создана. Сначала создайте группу или выберите существующую.`;
+            if (!fileSelects.length || files.some(file => !file) || !files.some(Boolean)) {
+                return `Маршрут "${routeName}": выберите список для каждого добавленного поля или удалите пустое поле списка.`;
+            }
+        }
+    }
     const lines = text.split('\n');
     const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
     let groupNames;
@@ -715,6 +731,20 @@ document.addEventListener('click', (e) => {
     }
 }, true);
 
+// Capture select changes before inline onchange handlers update their data-* attributes.
+document.addEventListener('change', (e) => {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
+        !e.target || e.target.tagName !== 'SELECT' ||
+        !e.target.closest('#config-sections')) return;
+    const current = captureSettingsSnapshot();
+    if (!current || !settingsUndoHistory.lastSnapshot ||
+        settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, current)) return;
+    if (!settingsUndoHistory.pending) {
+        pushSettingsUndo(settingsUndoHistory.lastSnapshot);
+        settingsUndoHistory.pending = true;
+    }
+}, true);
+
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && !e.altKey && activeTab === 'settings' && currentSettingsMode === 'ui') {
         const key = e.key.toLowerCase();
@@ -935,7 +965,7 @@ window.refreshRouteFileOptions = async function() {
     try { names = (await apiCall('get_lists')).split('\n').map(name => name.trim()).filter(Boolean); } catch (_) { return; }
     selects.forEach(select => {
         const current = select.value || select.dataset.currentPath || '';
-        const options = ['<option value="">Выберите список…</option>'];
+        const options = ['<option value="" disabled>Выберите список…</option>'];
         names.forEach(name => {
             const path = name.startsWith('/') ? name : '/opt/etc/smartdns/domains/' + name;
             options.push('<option value="' + UI.escape(path) + '">' + UI.escape(name) + '</option>');
@@ -945,6 +975,8 @@ window.refreshRouteFileOptions = async function() {
         select.innerHTML = options.join('');
         select.value = current;
         select.dataset.currentPath = current;
+        select.disabled = names.length === 0 && !current;
+        select.title = select.disabled ? 'Сначала создайте список доменов' : '';
     });
 };
 // === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
