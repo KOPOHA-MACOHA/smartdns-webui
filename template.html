@@ -60,6 +60,10 @@
             padding-right: 2.25rem !important;
         }
         .form-select:disabled { opacity: .65; cursor: not-allowed; }
+        /* Keep the log-level chevron independent of native/Bootstrap select background images. */
+        .log-level-select-wrap { position: relative; display: inline-flex; width: 50%; min-width: 0; }
+        .log-level-select-wrap #sec-logging-select { width: 100%; padding-right: 2.25rem !important; appearance: none !important; -webkit-appearance: none !important; background-image: none !important; }
+        .log-level-select-wrap::after { content: ""; position: absolute; right: .9rem; top: 50%; width: 8px; height: 8px; border-right: 2px solid #aab7c4; border-bottom: 2px solid #aab7c4; transform: translateY(-65%) rotate(45deg); pointer-events: none; }
         .form-control:focus, .form-select:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 17%, transparent) !important; }
         .form-control::placeholder { color: var(--muted) !important; opacity: .8; }
         .form-check-input { background-color: var(--field); border-color: var(--field-border); }
