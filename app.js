@@ -14,6 +14,159 @@ function resetToHome() {
 let originalConfigContent = ''; 
 let originalListContent = '';
 
+const settingsUndoHistory = {
+    undo: [],
+    redo: [],
+    lastSnapshot: null,
+    pending: false,
+    timer: null,
+    limit: 30
+};
+
+function captureSettingsSnapshot() {
+    const root = document.getElementById('config-sections');
+    if (!root) return null;
+    const controls = Array.from(root.querySelectorAll('input, textarea, select'));
+    const active = document.activeElement;
+    const activeIndex = controls.indexOf(active);
+    let selectionStart = null;
+    let selectionEnd = null;
+    try {
+        if (active && typeof active.selectionStart === 'number') {
+            selectionStart = active.selectionStart;
+            selectionEnd = active.selectionEnd;
+        }
+    } catch (_) {}
+
+    return {
+        html: root.innerHTML,
+        controls: controls.map(el => ({
+            value: el.value,
+            checked: 'checked' in el ? el.checked : null,
+            selectedIndex: el.tagName === 'SELECT' ? el.selectedIndex : null
+        })),
+        activeId: active && root.contains(active) ? active.id : '',
+        activeIndex,
+        selectionStart,
+        selectionEnd
+    };
+}
+
+function settingsSnapshotsEqual(a, b) {
+    return !!a && !!b && a.html === b.html &&
+        JSON.stringify(a.controls) === JSON.stringify(b.controls);
+}
+
+function pushSettingsUndo(snapshot) {
+    if (!snapshot) return;
+    settingsUndoHistory.undo.push(snapshot);
+    if (settingsUndoHistory.undo.length > settingsUndoHistory.limit) {
+        settingsUndoHistory.undo.shift();
+    }
+    settingsUndoHistory.redo = [];
+}
+
+function resetSettingsUndoHistory() {
+    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
+    settingsUndoHistory.undo = [];
+    settingsUndoHistory.redo = [];
+    settingsUndoHistory.pending = false;
+    settingsUndoHistory.timer = null;
+    settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
+}
+
+function commitPendingSettingsEdit() {
+    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
+    settingsUndoHistory.timer = null;
+    if (settingsUndoHistory.pending) {
+        settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
+        settingsUndoHistory.pending = false;
+    }
+}
+
+function scheduleSettingsUndoCheckpoint() {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui') return;
+    const current = captureSettingsSnapshot();
+    if (!current) return;
+
+    if (!settingsUndoHistory.lastSnapshot) {
+        settingsUndoHistory.lastSnapshot = current;
+        return;
+    }
+    if (settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, current)) return;
+
+    if (!settingsUndoHistory.pending) {
+        pushSettingsUndo(settingsUndoHistory.lastSnapshot);
+        settingsUndoHistory.pending = true;
+    }
+    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
+    settingsUndoHistory.timer = setTimeout(() => {
+        settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
+        settingsUndoHistory.pending = false;
+        settingsUndoHistory.timer = null;
+    }, 500);
+}
+
+function restoreSettingsSnapshot(snapshot) {
+    const root = document.getElementById('config-sections');
+    if (!root || !snapshot) return;
+
+    root.innerHTML = snapshot.html;
+    const controls = Array.from(root.querySelectorAll('input, textarea, select'));
+    controls.forEach((el, index) => {
+        const state = snapshot.controls[index];
+        if (!state) return;
+        el.value = state.value;
+        if (state.checked !== null && 'checked' in el) el.checked = state.checked;
+        if (el.tagName === 'SELECT' && state.selectedIndex !== null) el.selectedIndex = state.selectedIndex;
+    });
+
+    if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
+    if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
+    if (typeof initSortable === 'function') initSortable();
+
+    let focusTarget = snapshot.activeId ? root.querySelector('#' + CSS.escape(snapshot.activeId)) : null;
+    if (!focusTarget && snapshot.activeIndex >= 0) focusTarget = controls[snapshot.activeIndex];
+    if (focusTarget && root.contains(focusTarget)) {
+        focusTarget.focus({ preventScroll: true });
+        try {
+            if (snapshot.selectionStart !== null && typeof focusTarget.setSelectionRange === 'function') {
+                focusTarget.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+            }
+        } catch (_) {}
+    }
+
+    setTimeout(() => root.querySelectorAll('textarea').forEach(autoResizeTextarea), 0);
+    settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
+    settingsUndoHistory.pending = false;
+    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
+    settingsUndoHistory.timer = null;
+    updateSaveButtonState();
+}
+
+function undoSettingsChange() {
+    commitPendingSettingsEdit();
+    if (!settingsUndoHistory.undo.length) return;
+    const current = captureSettingsSnapshot();
+    const previous = settingsUndoHistory.undo.pop();
+    if (current) {
+        settingsUndoHistory.redo.push(current);
+        if (settingsUndoHistory.redo.length > settingsUndoHistory.limit) settingsUndoHistory.redo.shift();
+    }
+    restoreSettingsSnapshot(previous);
+}
+
+function redoSettingsChange() {
+    commitPendingSettingsEdit();
+    if (!settingsUndoHistory.redo.length) return;
+    const current = captureSettingsSnapshot();
+    const next = settingsUndoHistory.redo.pop();
+    if (current) {
+        settingsUndoHistory.undo.push(current);
+        if (settingsUndoHistory.undo.length > settingsUndoHistory.limit) settingsUndoHistory.undo.shift();
+    }
+    restoreSettingsSnapshot(next);
+}
 function toggleTestMode(enabled) { isTestMode = enabled; }
 
 // Центральный обработчик API
@@ -33,7 +186,7 @@ async function apiCall(action, target = null, body = null) {
             console.error('API вернуло HTML вместо данных! Проверьте index.cgi');
             return action.startsWith('get_') ? '' : false;
         }
-        return action.startsWith('get_') ? text : (text.trim() === 'OK');
+        return action.startsWith('get_') ? text : (action === 'restart_service' ? text.trim() : (text.trim() === 'OK'));
     } catch (e) {
         console.error("API Error:", e);
         return action.startsWith('get_') ? '' : false;
@@ -61,7 +214,7 @@ function updateSaveButtonState() {
     btn.className = dirty ? 'btn btn-primary btn-sm fw-bold ms-auto' : 'btn btn-outline-secondary btn-sm fw-bold ms-auto';
 }
 
-function markConfigDirty() { updateSaveButtonState(); }
+function markConfigDirty() { scheduleSettingsUndoCheckpoint(); updateSaveButtonState(); }
 function markListDirty() { updateSaveButtonState(); }
 
 // === АВТОРЕСАЙЗ ТЕКСТОВЫХ ПОЛЕЙ ===
@@ -85,6 +238,11 @@ function switchConfigSubtab(id, clicked) {
     if (!root) return;
     root.querySelectorAll('.settings-subtab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'settings-subtab-' + id));
     root.querySelectorAll('.settings-subnav .nav-link').forEach(link => link.classList.toggle('active', link === clicked || link.dataset.subtab === id));
+    // Textareas in inactive sub-tabs have no measurable layout. Resize them after the panel becomes visible.
+    const activePanel = root.querySelector('#settings-subtab-' + id);
+    setTimeout(() => {
+        activePanel?.querySelectorAll('textarea').forEach(autoResizeTextarea);
+    }, 0);
     try { localStorage.setItem('smartdns-ui-active-subtab', id); } catch (_) {}
 }
 window.switchConfigSubtab = switchConfigSubtab;
@@ -163,7 +321,11 @@ function switchSettingsMode(mode) {
                 mode: "smartdns",
                 theme: "default",
                 lineNumbers: true,
-                lineWrapping: true
+                lineWrapping: true,
+                extraKeys: {
+                    "Ctrl-/": toggleCommentRaw,
+                    "Cmd-/": toggleCommentRaw
+                }
             });
             window.rawEditor = rawEditor;
             rawEditor.on('change', () => {
@@ -194,6 +356,7 @@ function switchSettingsMode(mode) {
     }
     
     currentSettingsMode = mode;
+    resetSettingsUndoHistory();
     updateSaveButtonState();
 }
 
@@ -400,6 +563,7 @@ async function loadConfig() {
     if (currentSettingsMode === 'raw') {
         document.getElementById('raw-config-text').value = content;
     }
+    resetSettingsUndoHistory();
     updateSaveButtonState();
     
     setTimeout(() => {
@@ -409,17 +573,46 @@ async function loadConfig() {
 }
 
 async function restartService() {
-    const btn = document.getElementById('global-save-btn');
-    if (!btn.disabled) {
+    const btn = document.getElementById('restart-service-btn');
+    if (btn && btn.disabled) return;
+
+    const saveBtn = document.getElementById('global-save-btn');
+    if (saveBtn && !saveBtn.disabled) {
         const saved = await globalSave();
         if (!saved) return;
     }
-    const restarted = await apiCall('restart_service');
-    if (!restarted) {
-        alert('Не удалось подтвердить перезапуск SmartDNS. Проверьте состояние сервиса и журнал.');
-        return;
+
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Перезапуск...';
+        btn.setAttribute('aria-busy', 'true');
     }
-    alert('Команда перезапуска отправлена. Проверьте работу SmartDNS.');
+
+    try {
+        const result = await apiCall('restart_service');
+        if (result !== 'OK') {
+            const details = typeof result === 'string' && result
+                ? '\n\n' + result.slice(0, 500)
+                : '\n\nНе удалось получить ответ от WebUI.';
+            alert('Перезапуск SmartDNS НЕ подтверждён.' + details);
+            return;
+        }
+        if (isTestMode) {
+            alert('Тестовый режим: запрос проверен, реальный SmartDNS не перезапускался.');
+        } else {
+            alert('SmartDNS успешно перезапущен. Команда завершилась без ошибки, а процесс службы обнаружен после перезапуска.');
+        }
+    } catch (e) {
+        console.error('SmartDNS restart failed:', e);
+        alert('Не удалось проверить результат перезапуска SmartDNS. Обнови страницу и проверь журнал службы.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.innerHTML = originalHtml;
+        }
+    }
 }
 
 async function loadLists() {
@@ -515,7 +708,28 @@ async function loadLog() {
     document.getElementById('log-content').value = await apiCall('get_log');
 }
 
+document.addEventListener('click', (e) => {
+    if (activeTab === 'settings' && currentSettingsMode === 'ui' &&
+        e.target.closest('#config-sections')) {
+        commitPendingSettingsEdit();
+    }
+}, true);
+
 document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && !e.altKey && activeTab === 'settings' && currentSettingsMode === 'ui') {
+        const key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            undoSettingsChange();
+            return;
+        }
+        if (key === 'y' || (key === 'z' && e.shiftKey)) {
+            e.preventDefault();
+            redoSettingsChange();
+            return;
+        }
+    }
+
     if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         const btn = document.getElementById('global-save-btn');
@@ -532,6 +746,32 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+
+function toggleCommentRaw(cm) {
+    const from = cm.getCursor('from');
+    const to = cm.getCursor('to');
+    const firstLine = from.line;
+    const lastLine = to.ch === 0 && to.line > firstLine ? to.line - 1 : to.line;
+    const lines = [];
+    for (let line = firstLine; line <= lastLine; line++) lines.push(cm.getLine(line));
+
+    const allCommented = lines.every(line => line.trim() === '' || line.trim().startsWith('#'));
+    const updated = lines.map(line => {
+        if (line.trim() === '') return line;
+        return allCommented ? line.replace(/^(\s*)#\s?/, '$1') : '#' + line;
+    });
+
+    cm.operation(() => {
+        cm.replaceRange(updated.join('\n'), { line: firstLine, ch: 0 }, {
+            line: lastLine,
+            ch: cm.getLine(lastLine).length
+        });
+        cm.setSelection(
+            { line: firstLine, ch: 0 },
+            { line: lastLine, ch: updated[updated.length - 1].length }
+        );
+    });
+}
 
 function toggleComment(textarea) {
     const start = textarea.selectionStart;
