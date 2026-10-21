@@ -115,7 +115,7 @@ const UI = {
     routeFileRow: (path) => `
         <div class="route-file-row d-flex align-items-center gap-2">
             <i class="bi bi-file-earmark-text text-secondary"></i>
-            <select class="form-select form-select-sm route-file-select" data-current-path="${UI.escape(path)}" onchange="this.dataset.currentPath=this.value; markConfigDirty()"><option value="${UI.escape(path)}" selected>${UI.escape(path || 'Выберите список…')}</option></select>
+            <select class="form-select form-select-sm route-file-select" data-current-path="${UI.escape(path)}" onchange="this.dataset.currentPath=this.value; markConfigDirty()"><option value="" disabled ${path ? '' : 'selected'}>Выберите список…</option>${path ? '<option value="' + UI.escape(path) + '" selected>' + UI.escape(path) + '</option>' : ''}</select>
             <button type="button" class="icon-action danger" onclick="this.closest('.route-file-row').remove(); markConfigDirty();" title="Убрать список"><i class="bi bi-trash3"></i></button>
         </div>`,
     routeCard: (name, group, files) => `
@@ -322,12 +322,14 @@ window.refreshRouteGroupOptions = function() {
         .map(input => input.value.trim()).filter(Boolean);
     document.querySelectorAll('.route-group').forEach(select => {
         const selected = select.value || select.dataset.currentGroup || '';
-        const options = ['<option value="">Выберите DNS-группу…</option>'];
+        const options = ['<option value="" disabled>Выберите DNS-группу…</option>'];
         names.forEach(name => options.push('<option value="' + UI.escape(name) + '">' + UI.escape(name) + '</option>'));
         if (selected && !names.includes(selected)) options.push('<option value="' + UI.escape(selected) + '">' + UI.escape(selected) + ' (не найдена)</option>');
         select.innerHTML = options.join('');
         select.value = selected;
         select.dataset.currentGroup = selected;
+        select.disabled = names.length === 0 && !selected;
+        select.title = select.disabled ? 'Сначала создайте DNS-группу' : '';
     });
 };
 
