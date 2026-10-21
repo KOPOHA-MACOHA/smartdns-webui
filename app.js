@@ -776,15 +776,37 @@ document.addEventListener('click', (e) => {
     commitPendingSettingsEdit();
 }, true);
 
-// Select values have already changed when the change event fires. Store the last
-// known pre-change snapshot, then advance the baseline immediately.
+// Capture a select's state before the user changes it. The DOM value is already
+// updated by the time its change event fires, so relying only on that event can
+// leave undo history with a post-change snapshot.
+const selectUndoBefore = new WeakMap();
+function rememberSelectUndoBefore(target) {
+    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
+        !target || target.tagName !== 'SELECT' ||
+        !target.closest('#config-sections')) return;
+    const snapshot = captureSettingsSnapshot();
+    if (snapshot) selectUndoBefore.set(target, snapshot);
+}
+
+document.addEventListener('focusin', (e) => rememberSelectUndoBefore(e.target), true);
+document.addEventListener('pointerdown', (e) => rememberSelectUndoBefore(e.target), true);
+document.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) rememberSelectUndoBefore(e.target);
+}, true);
+
+// Select values have already changed when the change event fires. Prefer the
+// snapshot captured on focus/pointer/keyboard interaction, then advance baseline.
 document.addEventListener('change', (e) => {
     if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
         !e.target || e.target.tagName !== 'SELECT' ||
         !e.target.closest('#config-sections')) return;
     const current = captureSettingsSnapshot();
-    const previous = settingsUndoHistory.lastSnapshot;
-    if (!current || !previous || settingsSnapshotsEqual(previous, current)) return;
+    const previous = selectUndoBefore.get(e.target) || settingsUndoHistory.lastSnapshot;
+    selectUndoBefore.delete(e.target);
+    if (!current || !previous || settingsSnapshotsEqual(previous, current)) {
+        settingsUndoHistory.lastSnapshot = current || settingsUndoHistory.lastSnapshot;
+        return;
+    }
     if (!settingsUndoHistory.pending) pushSettingsUndo(previous);
     settingsUndoHistory.pending = false;
     if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
