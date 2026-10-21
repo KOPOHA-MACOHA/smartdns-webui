@@ -638,17 +638,36 @@ async function loadLists() {
     container.replaceChildren();
 
     lists.forEach(name => {
-        const item = document.createElement('a');
-        item.href = '#';
-        item.className = 'list-group-item list-group-item-action ' +
+        const item = document.createElement('div');
+        item.className = 'list-group-item list-group-item-action d-flex align-items-center gap-2 ' +
             (name === activeList ? 'active' : 'bg-dark text-light border-secondary');
+        item.setAttribute('role', 'group');
+        item.title = name;
+
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.dataset.listName = name;
+        selectButton.setAttribute('aria-label', 'Выбрать список ' + name);
+        selectButton.className = 'btn btn-link text-start text-decoration-none p-0 flex-grow-1 text-reset';
+        selectButton.style.minWidth = '0';
+        selectButton.style.overflowWrap = 'anywhere';
         const icon = document.createElement('i');
         icon.className = 'bi bi-file-earmark-text me-2';
-        item.append(icon, document.createTextNode(name));
-        item.addEventListener('click', event => {
-            event.preventDefault();
-            selectList(name);
+        selectButton.append(icon, document.createTextNode(name));
+        selectButton.addEventListener('click', () => selectList(name));
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'btn btn-sm btn-outline-danger flex-shrink-0';
+        deleteButton.title = 'Удалить список ' + name;
+        deleteButton.setAttribute('aria-label', 'Удалить список ' + name);
+        deleteButton.innerHTML = '<i class="bi bi-trash"></i>';
+        deleteButton.addEventListener('click', event => {
+            event.stopPropagation();
+            deleteList(name);
         });
+
+        item.append(selectButton, deleteButton);
         container.appendChild(item);
     });
 
@@ -666,12 +685,11 @@ async function selectList(name) {
     activeList = name;
     
     document.querySelectorAll('#lists-container .list-group-item').forEach(el => {
-        el.classList.remove('active');
-        el.classList.add('bg-dark', 'text-light', 'border-secondary');
-        if (el.innerText.trim() === name) {
-            el.classList.add('active');
-            el.classList.remove('bg-dark', 'text-light', 'border-secondary');
-        }
+        const selected = el.querySelector('button[aria-label^="Выбрать список"]')?.dataset.listName === name;
+        el.classList.toggle('active', selected);
+        el.classList.toggle('bg-dark', !selected);
+        el.classList.toggle('text-light', !selected);
+        el.classList.toggle('border-secondary', !selected);
     });
     
     document.getElementById('current-list-title').innerText = 'Редактирование: ' + name;
@@ -705,18 +723,28 @@ async function createList() {
     await selectList(name);
 }
 
-async function deleteList() {
-    if (!activeList || !confirm('Точно удалить ' + activeList + '?')) return;
-    const deleted = await apiCall('delete_list', activeList);
+async function deleteList(name = activeList) {
+    if (!name || !confirm('Точно удалить ' + name + '?')) return;
+    if (name === activeList) {
+        const saveButton = document.getElementById('global-save-btn');
+        if (saveButton && !saveButton.disabled &&
+            !confirm('В текущем списке есть несохранённые изменения. Удалить список вместе с ними?')) return;
+    }
+
+    const deleted = await apiCall('delete_list', name);
     if (!deleted) {
         alert('Не удалось удалить список. Проверьте права доступа и журнал.');
         return;
     }
-    activeList = '';
-    const ta = document.getElementById('list-content');
-    ta.value = ''; ta.disabled = true;
-    originalListContent = '';
-    document.getElementById('current-list-title').innerText = 'Выберите список';
+
+    if (name === activeList) {
+        activeList = '';
+        const ta = document.getElementById('list-content');
+        ta.value = '';
+        ta.disabled = true;
+        originalListContent = '';
+        document.getElementById('current-list-title').innerText = 'Выберите список';
+    }
     await loadLists();
 }
 
