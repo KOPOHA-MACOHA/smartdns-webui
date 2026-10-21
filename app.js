@@ -321,7 +321,11 @@ function switchSettingsMode(mode) {
                 mode: "smartdns",
                 theme: "default",
                 lineNumbers: true,
-                lineWrapping: true
+                lineWrapping: true,
+                extraKeys: {
+                    "Ctrl-/": toggleCommentRaw,
+                    "Cmd-/": toggleCommentRaw
+                }
             });
             window.rawEditor = rawEditor;
             rawEditor.on('change', () => {
@@ -742,6 +746,32 @@ document.addEventListener('keydown', (e) => {
         }
     }
 });
+
+function toggleCommentRaw(cm) {
+    const from = cm.getCursor('from');
+    const to = cm.getCursor('to');
+    const firstLine = from.line;
+    const lastLine = to.ch === 0 && to.line > firstLine ? to.line - 1 : to.line;
+    const lines = [];
+    for (let line = firstLine; line <= lastLine; line++) lines.push(cm.getLine(line));
+
+    const allCommented = lines.every(line => line.trim() === '' || line.trim().startsWith('#'));
+    const updated = lines.map(line => {
+        if (line.trim() === '') return line;
+        return allCommented ? line.replace(/^(\\s*)#\\s?/, '$1') : '#' + line;
+    });
+
+    cm.operation(() => {
+        cm.replaceRange(updated.join('\\n'), { line: firstLine, ch: 0 }, {
+            line: lastLine,
+            ch: cm.getLine(lastLine).length
+        });
+        cm.setSelection(
+            { line: firstLine, ch: 0 },
+            { line: lastLine, ch: updated[updated.length - 1].length }
+        );
+    });
+}
 
 function toggleComment(textarea) {
     const start = textarea.selectionStart;
