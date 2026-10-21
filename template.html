@@ -550,6 +550,70 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
     }
 }
 
+
+/* Follow-up: compact switch rows on phones and independent item columns on desktop. */
+@media (min-width: 1100px) {
+    /* Masonry-style columns: expanding one group won't push items in the other column down. */
+    #dynamic-groups-container,
+    #dynamic-routes-container {
+        display: block !important;
+        column-count: 2;
+        column-gap: 12px;
+    }
+    #dynamic-groups-container > .group-item,
+    #dynamic-routes-container > .route-item {
+        display: inline-block;
+        width: 100%;
+        min-width: 0;
+        margin: 0 0 12px !important;
+        vertical-align: top;
+        break-inside: avoid;
+    }
+    #dynamic-groups-container > #no-groups-msg,
+    #dynamic-routes-container > #no-route-msg {
+        display: block;
+        column-span: all;
+    }
+    /* Two columns for routing cards as well, independently of the item lists above. */
+    #settings-subtab-routing.active {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 16px;
+    }
+    #settings-subtab-routing.active > .card {
+        width: auto;
+        min-width: 0;
+        margin: 0 !important;
+    }
+}
+@media (max-width: 767.98px) {
+    /* The labels and switch controls share one row in Core settings. */
+    #settings-subtab-core .row.mb-3.align-items-center:has(.form-switch) {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto !important;
+        align-items: center !important;
+        column-gap: 12px !important;
+    }
+    #settings-subtab-core .row.mb-3.align-items-center:has(.form-switch) > [class*="col-"] {
+        width: auto !important;
+        min-width: 0;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    #settings-subtab-core .row.mb-3.align-items-center:has(.form-switch) > [class*="col-"]:last-child {
+        justify-self: end;
+    }
+    #settings-subtab-core .form-switch {
+        width: auto !important;
+        min-height: 32px !important;
+        justify-content: flex-end;
+    }
+    #settings-subtab-core .form-switch .form-check-input {
+        margin: 0 !important;
+    }
+}
+
 </style>
 </head>
 <body>
