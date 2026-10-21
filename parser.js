@@ -154,7 +154,7 @@ const UI = {
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
             <div class="group-body">
-                <textarea class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\\r?\\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape(content || '')}</textarea>
+                <textarea class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\r?\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape(content || '')}</textarea>
             </div>
         </div>`,
     coreCard: (data, rawLines) => `
@@ -648,7 +648,7 @@ function gatherSectionsText() {
 
     const collectDnsRows = id => {
         const editor = document.getElementById('sec-' + id);
-        return editor ? editor.value.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean) : [];
+        return editor ? editor.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : [];
     };
         const bsRows = collectDnsRows('bootstrap');
     if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDns(line, '-bootstrap-dns') + '\n'; }); text += '\n'; }
@@ -662,7 +662,7 @@ function gatherSectionsText() {
         grpItems.forEach(item => {
             let name = item.querySelector('.group-name-input').value.trim();
             const groupEditor = item.querySelector('.group-dns-list');
-            const dnsRows = groupEditor ? groupEditor.value.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean) : [];
+            const dnsRows = groupEditor ? groupEditor.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : [];
             if (name && dnsRows.length) {
                 dnsRows.forEach(line => { text += formatDns(line, `-exclude-default-group -group ${name}`) + '\n'; });
             }
