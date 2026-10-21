@@ -85,6 +85,11 @@ function switchConfigSubtab(id, clicked) {
     if (!root) return;
     root.querySelectorAll('.settings-subtab-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'settings-subtab-' + id));
     root.querySelectorAll('.settings-subnav .nav-link').forEach(link => link.classList.toggle('active', link === clicked || link.dataset.subtab === id));
+    // Textareas in inactive sub-tabs have no measurable layout. Resize them after the panel becomes visible.
+    const activePanel = root.querySelector('#settings-subtab-' + id);
+    setTimeout(() => {
+        activePanel?.querySelectorAll('textarea').forEach(autoResizeTextarea);
+    }, 0);
     try { localStorage.setItem('smartdns-ui-active-subtab', id); } catch (_) {}
 }
 window.switchConfigSubtab = switchConfigSubtab;
