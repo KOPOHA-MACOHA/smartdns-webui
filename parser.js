@@ -143,7 +143,7 @@ const UI = {
 
     groupCard: (name, content) => `
         <div class="group-item border p-2 mb-2 rounded position-relative shadow-sm" data-group-name="${UI.escape(name)}">
-            <div class="group-heading d-flex gap-2 align-items-center mb-2">
+            <div class="group-heading d-flex gap-2 align-items-center mb-2" onclick="toggleDnsGroupFromHeader(event, this)">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <button type="button" class="group-collapse-toggle btn btn-sm btn-link text-reset p-1" onclick="toggleDnsGroup(this)" aria-expanded="true" title="Свернуть DNS-группу" aria-label="Свернуть DNS-группу"><i class="bi bi-chevron-down"></i></button>
                 <div class="editable-name group-editable-name flex-grow-1">
@@ -238,6 +238,13 @@ window.toggleAddressRecord = function(checkbox) {
     row.classList.toggle('is-disabled', !checkbox.checked);
     checkbox.title = checkbox.checked ? 'Локальный адрес включён' : 'Локальный адрес отключён';
     markConfigDirty();
+};
+
+window.toggleDnsGroupFromHeader = function(event, heading) {
+    // Keep controls and drag handling independent from the header's collapse action.
+    if (!event || !heading || event.target.closest('button, input, textarea, select, a, .drag-handle, [contenteditable="true"]')) return;
+    const button = heading.querySelector('.group-collapse-toggle');
+    if (button) window.toggleDnsGroup(button);
 };
 
 window.toggleDnsGroup = function(button) {
