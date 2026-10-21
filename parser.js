@@ -94,9 +94,9 @@ const UI = {
             <div class="card-body p-3">
                 <div class="d-flex align-items-center">
                     <label class="form-label text-light small fw-bold mb-0 me-3">Уровень логов (log-level):</label>
-                    <select id="sec-logging-select" class="form-select form-select-sm bg-secondary text-light border-secondary w-50" style="background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23aab7c4' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 6 5 5 5-5'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right .65rem center;background-size:16px 12px;padding-right:2.25rem" onchange="markConfigDirty()">
+                    <span class="log-level-select-wrap"><select id="sec-logging-select" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty()">
                         ${['fatal','error','warn','notice','info','debug'].map(l => `<option value="${l}" ${l===level?'selected':''}>${l}</option>`).join('')}
-                    </select>
+                    </select></span>
                 </div>
             </div>
         </div>`,
