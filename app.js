@@ -706,7 +706,7 @@ async function loadLog() {
 
 document.addEventListener('click', (e) => {
     if (activeTab === 'settings' && currentSettingsMode === 'ui' &&
-        e.target.closest('#config-sections button, #config-sections .drag-handle')) {
+        e.target.closest('#config-sections')) {
         commitPendingSettingsEdit();
     }
 }, true);
