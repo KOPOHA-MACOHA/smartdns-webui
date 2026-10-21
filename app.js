@@ -807,10 +807,12 @@ document.addEventListener('change', (e) => {
         settingsUndoHistory.lastSnapshot = current || settingsUndoHistory.lastSnapshot;
         return;
     }
-    if (!settingsUndoHistory.pending) pushSettingsUndo(previous);
-    settingsUndoHistory.pending = false;
-    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
-    settingsUndoHistory.timer = null;
+
+    // Finish any edit already in progress before recording the select change.
+    // The prior edit has its own undo entry; the select needs an additional
+    // checkpoint for the exact state immediately before this selection.
+    commitPendingSettingsEdit();
+    pushSettingsUndo(previous);
     settingsUndoHistory.lastSnapshot = current;
 }, true);
 
