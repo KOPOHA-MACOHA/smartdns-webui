@@ -3,19 +3,21 @@ test('shared history coalesces typing, separates documents and retains edits mad
  let now=1;const c=new ChangeController({limit:2,now:()=>now});c.open('a',{text:'old'});c.change('a',{text:'n'},{group:'field'});now+=10;c.change('a',{text:'new'},{group:'field'});assert.equal(c.get().undo.length,1);assert.equal(c.undo().text,'old');assert(!c.dirty());assert.equal(c.redo().text,'new');const reviewed=c.get().draft;c.change('a',{text:'later'});c.saved('a',reviewed,'rev');assert(c.dirty());assert.equal(c.get().draft.text,'later');c.open('b',{text:'other'});assert(!c.dirty());c.activate('a');assert(c.dirty());c.applyState('a','VERIFYING','new');assert.equal(c.get().applied,null);c.applyState('a','COMMITTED','new');assert.equal(c.get().applied,'new');c.discard();assert(!c.dirty());assert.equal(c.undo().text,'later');c.change('a',{text:'branch'});assert.equal(c.redo(),null);c.begin('apply');assert.equal(c.undo(),null);assert.equal(c.begin('save'),false);c.end();assert(c.get().undo.length<=2);
 });
 const config='bind :53\nbind-tcp :53\ncache-size 8192\nserver-tcp 1.1.1.1\nlog-level info\n';
-async function editor(fixture=config){
+async function editor(fixture=config,mobile=false){
  const html=fs.readFileSync(require.resolve('../template.html'),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'');
  const dom=new JSDOM(html,{url:'http://localhost/settings',runScripts:'dangerously'});const w=dom.window,calls=[],alerts=[];
- w.alert=s=>alerts.push(s);w.confirm=()=>true;
+ w.alert=s=>alerts.push(s);w.confirm=()=>true;w.scrollTo=()=>{};
+ const media={matches:mobile,addEventListener(type,fn){this.listener=fn}};w.matchMedia=()=>media;
  w.Sortable=class{static get(){return true}};
  w.CodeMirror={defineSimpleMode(){},fromTextArea(el){let value=el.value,change;return {on(type,fn){change=fn},getValue:()=>value,setValue(v){value=v;change?.()},clearHistory(){},refresh(){}}}};
  for(const file of ['parser.js','validator.js','change-center.js'])vm.runInContext(fs.readFileSync(require.resolve('../'+file),'utf8'),dom.getInternalVMContext());
+ vm.runInContext(fs.readFileSync(require.resolve('../shell.js'),'utf8'),dom.getInternalVMContext());
  vm.runInContext(fs.readFileSync(require.resolve('../app.js'),'utf8').replace(/initApp\(\);\s*$/,''),dom.getInternalVMContext());
  w.eval(`apiCall=async function(action,target,body){window.calls.push({action,target,body});if(action==='get_config_snapshot')return 'REVISION '+ 'a'.repeat(64)+'\\n'+window.fixture;if(action==='get_lists')return 'a.list\\nb.list\\n';if(action==='get_list')return target==='a.list'?'alpha\\n':'beta\\n';if(action==='save_list'||action==='delete_list')return true;throw Error('Unexpected '+action)};`);
  w.calls=calls;w.fixture=fixture;w.reviewConfigChanges=async()=>true;
  await w.switchTab('settings',null,false);
  const settle=async()=>{for(let i=0;i<5;i++)await Promise.resolve()};await settle();
- return {w,dom,calls,alerts,state:()=>vm.runInContext('changes',dom.getInternalVMContext()),settle,close:()=>w.close()};
+ return {w,dom,calls,alerts,media,state:()=>vm.runInContext('changes',dom.getInternalVMContext()),settle,close:()=>w.close()};
 }
 test('visual and Raw changes share undo and survive tab switches without rewriting unchanged config',async()=>{
  const e=await editor();const {w}=e;try{
@@ -76,5 +78,27 @@ test('keyboard undo and redo cover switches, checkboxes and selects in either ke
    key('z','KeyZ');assert(!e.state().dirty(),id);
   }
   const input=w.document.getElementById('new-list-name');input.focus();const event=new w.KeyboardEvent('keydown',{key:'я',code:'KeyZ',ctrlKey:true,bubbles:true,cancelable:true});input.dispatchEvent(event);assert(!event.defaultPrevented);
+ }finally{e.close()}
+});
+test('sidebar navigation and collapsing preserve drafts, undo history and active page',async()=>{
+ const e=await editor();const {w}=e;try{
+  const field=w.document.getElementById('core-cache-size');field.value='4096';field.dispatchEvent(new w.Event('input',{bubbles:true}));const history=e.state().get().undo.length;
+  await w.openSettingsSection('groups');assert.equal(w.document.getElementById('page-title').textContent,'Группы DNS');assert.equal(w.document.querySelector('#app-navigation [aria-current=page]').dataset.section,'groups');
+  w.toggleSidebar();assert.equal(w.document.documentElement.dataset.sidebar,'collapsed');assert.equal(w.localStorage.getItem('smartdns-sidebar-collapsed'),'1');assert.equal(e.state().get().undo.length,history);
+  await w.openShellPage('lists');await w.openSettingsSection('core');assert.equal(w.document.getElementById('core-cache-size').value,'4096');assert(e.state().dirty());w.undoEditorChange();assert(!e.state().dirty());assert.equal(e.calls.filter(x=>!x.action.startsWith('get_')).length,0);assert.equal(e.alerts.length,0);
+ }finally{e.close()}
+});
+test('mobile drawer traps focus, closes with Escape and navigation, and preserves desktop preference',async()=>{
+ const e=await editor(config,true);const {w,media}=e;try{
+  const nav=w.document.getElementById('app-navigation'),toggle=w.document.getElementById('mobile-menu-toggle');assert(nav.inert);w.toggleSidebar();assert(!nav.inert);assert.equal(toggle.getAttribute('aria-expanded'),'true');
+  const first=nav.querySelector('nav button'),last=[...nav.querySelectorAll('nav button')].at(-1);first.focus();first.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));assert.equal(w.document.activeElement,last);
+  last.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert(nav.inert);assert.equal(w.document.activeElement,toggle);
+  w.toggleSidebar();await w.openSettingsSection('routing');assert(nav.inert);assert.equal(w.document.getElementById('page-title').textContent,'Маршрутизация');assert.equal(w.document.activeElement.id,'page-title');
+  media.matches=false;media.listener();w.toggleSidebar();assert.equal(w.document.documentElement.dataset.sidebar,'collapsed');media.matches=true;media.listener();w.toggleSidebar();assert.equal(w.document.documentElement.dataset.sidebar,'collapsed');assert(!nav.inert);media.matches=false;media.listener();assert.equal(w.document.documentElement.dataset.sidebar,'collapsed');
+ }finally{e.close()}
+});
+test('undo restores configuration data without moving the selected sidebar section',async()=>{
+ const e=await editor();const {w}=e;try{
+  const input=w.document.getElementById('core-cache-size');input.value='4096';input.dispatchEvent(new w.Event('input',{bubbles:true}));await w.openSettingsSection('groups');w.undoEditorChange();assert(!e.state().dirty());assert.equal(w.document.querySelector('.settings-subtab-panel.active').id,'settings-subtab-groups');assert.equal(w.document.getElementById('page-title').textContent,'Группы DNS');assert.equal(w.document.querySelector('#app-navigation [aria-current=page]').dataset.section,'groups');
  }finally{e.close()}
 });

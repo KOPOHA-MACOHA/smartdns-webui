@@ -48,6 +48,7 @@ function renderConfigDraft(snapshot) {
     renderingEditor=true;
     try {
         const root=document.getElementById('config-sections');
+        const section=root.querySelector('.settings-subtab-panel.active')?.id.replace('settings-subtab-','');
         if(currentSettingsMode==='ui') {
             if(snapshot.ui) {
                 root.innerHTML=snapshot.ui.html;
@@ -56,7 +57,9 @@ function renderConfigDraft(snapshot) {
                     el.value=state.value;if(state.checked!==null)el.checked=state.checked;
                 });
             } else root.innerHTML=parseConfigToSections(snapshot.text);
-            organizeConfigSections();refreshRouteGroupOptions();
+            organizeConfigSections();
+            if(section)switchConfigSubtab(section);
+            refreshRouteGroupOptions();
             if(typeof refreshRouteFileOptions==='function')refreshRouteFileOptions();
             if(typeof applyDnsGroupCollapseState==='function')applyDnsGroupCollapseState();
             root.querySelectorAll('textarea').forEach(autoResizeTextarea);initSortable();
@@ -193,6 +196,7 @@ function switchConfigSubtab(id, clicked) {
         activePanel?.querySelectorAll('textarea').forEach(autoResizeTextarea);
     }, 0);
     try { localStorage.setItem('smartdns-ui-active-subtab', id); } catch (_) {}
+    window.syncShellNavigation?.('settings',id);
 }
 window.switchConfigSubtab = switchConfigSubtab;
 
@@ -377,6 +381,7 @@ if (tabId === 'settings') {
         await loadLog();
     }
     changes.activate(currentDocumentId());renderChangeCenter();
+    window.syncShellNavigation?.(tabId);
 }
 
 window.addEventListener('popstate', (e) => {

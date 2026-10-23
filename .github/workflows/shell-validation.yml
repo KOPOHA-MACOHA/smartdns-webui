@@ -27,6 +27,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check change-center.js
+          node --check shell.js
           node --check app.js
           node --check safe-apply.js
           node --check config-review.js
