@@ -118,6 +118,14 @@ fi
 
 REQUEST_PATH=${REQUEST_URI%%\?*}
 case "$REQUEST_PATH" in
+    /safe-apply.js)
+        printf "Content-Type: application/javascript; charset=utf-8\r\nCache-Control: no-store\r\n\r\n"
+        cat "$BASE_DIR/safe-apply.js"
+        ;;
+    /config-review.js)
+        printf "Content-Type: application/javascript; charset=utf-8\r\nCache-Control: no-store\r\n\r\n"
+        cat "$BASE_DIR/config-review.js"
+        ;;
     /app.js)
         printf "Content-Type: application/javascript; charset=utf-8\r\nCache-Control: no-store\r\n\r\n"
         cat "$BASE_DIR/app.js"

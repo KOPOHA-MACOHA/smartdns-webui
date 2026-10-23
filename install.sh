@@ -10,7 +10,7 @@ case "$REPO_REF" in
     *[!A-Za-z0-9._/-]*|""|/*|*..*) echo "ERROR: некорректный REPO_REF" >&2; exit 1 ;;
 esac
 REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/$REPO_REF"
-FILES="index.cgi api.sh template.html parser.js validator.js version.js app.js version.txt"
+FILES="index.cgi api.sh template.html parser.js validator.js validator.awk validator-46.1.txt preflight.sh preflight-prepare.awk apply.sh apply-runtime.sh apply-plan.awk safe-apply.js version.js config-review.js app.js version.txt"
 T="$(date +%Y%m%d-%H%M%S)-$$"
 BACKUP_ROOT="/opt/var/backups/smartdns-webui"
 BACKUP_DIR="$BACKUP_ROOT/$T"
@@ -87,6 +87,14 @@ echo "[2/5] Проверка скачанных файлов..."
 sed -i 's/\r$//' "$STAGE_DIR/index.cgi" "$STAGE_DIR/api.sh"
 sh -n "$STAGE_DIR/index.cgi" || fail "синтаксическая ошибка в index.cgi"
 sh -n "$STAGE_DIR/api.sh" || fail "синтаксическая ошибка в api.sh"
+sh -n "$STAGE_DIR/preflight.sh" || fail "синтаксическая ошибка в preflight.sh"
+sh -n "$STAGE_DIR/apply.sh" || fail "синтаксическая ошибка в apply.sh"
+sh -n "$STAGE_DIR/apply-runtime.sh" || fail "синтаксическая ошибка в apply-runtime.sh"
+awk -v version=46.1 -f "$STAGE_DIR/validator.awk" "$STAGE_DIR/validator-46.1.txt" /dev/null >/dev/null ||
+    fail "не удалось проверить серверный валидатор"
+printf 'server 1.1.1.1\n' | awk -v version=46.1 -v preflight=1 -v work="$STAGE_DIR" \
+    -f "$STAGE_DIR/validator.awk" -f "$STAGE_DIR/preflight-prepare.awk" "$STAGE_DIR/validator-46.1.txt" - >/dev/null ||
+    fail "не удалось проверить подготовку изолированного конфига"
 case "$(cat "$STAGE_DIR/version.txt" | tr -d '\r\n')" in
     ""|*[!0-9.]* ) fail "некорректный version.txt" ;;
 esac

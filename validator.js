@@ -58,7 +58,7 @@
             const trimmed = raw.trim();
             if (!trimmed || trimmed.startsWith('#')) return;
 
-            const quote = unclosedQuote(raw);
+            const quote = unclosedQuote(stripComment(raw));
             if (quote) {
                 errors.push('Строка ' + lineNo + ': незакрытая кавычка ' + quote + '.');
                 return;
@@ -98,8 +98,8 @@
                 errors.push('Строка ' + lineNo + ': ' + directive + ' принимает yes или no.');
             }
 
-            if (directive === 'cache-size' && args.length && !/^\d+$/.test(args[0])) {
-                errors.push('Строка ' + lineNo + ': cache-size должен быть целым неотрицательным числом.');
+            if (directive === 'cache-size' && args.length && !/^(?:-1|\d+)$/.test(args[0])) {
+                errors.push('Строка ' + lineNo + ': cache-size должен быть целым числом от -1.');
             }
 
             if (directive === 'log-level' && args.length && !LOG_LEVELS.has(args[0])) {
@@ -131,6 +131,19 @@
         return { errors: Array.from(new Set(errors)), warnings: Array.from(new Set(warnings)) };
     }
 
+    function parseValidationReport(text) {
+        const result = {profile:'', kind:'static', errors:[], warnings:[], info:[]};
+        String(text).split(/\r?\n/).filter(Boolean).forEach(line => {
+            const [level, number, ...rest] = line.split('\t');
+            if (level === 'PROFILE') { result.profile = number; result.kind = rest[0] === 'preflight' ? 'preflight' : 'static'; return; }
+            const field = {E:'errors', W:'warnings', I:'info'}[level];
+            if (!field || !/^\d+$/.test(number) || !rest.length) { result.errors.push('Некорректный ответ серверного валидатора.'); return; }
+            result[field].push((number !== '0' ? 'Строка ' + number + ': ' : '') + rest.join(' '));
+        });
+        if (!result.profile) result.errors.push('Версия SmartDNS не получена; проверка не подтверждена.');
+        return result;
+    }
     root.validateSmartDnsConfig = validateSmartDnsConfig;
-    if (typeof module !== 'undefined' && module.exports) module.exports = { validateSmartDnsConfig };
+    root.parseValidationReport = parseValidationReport;
+    if (typeof module !== 'undefined' && module.exports) module.exports = { validateSmartDnsConfig, parseValidationReport };
 }(typeof window !== 'undefined' ? window : globalThis));

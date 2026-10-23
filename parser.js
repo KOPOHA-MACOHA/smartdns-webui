@@ -82,9 +82,41 @@ window.formatDnsForSection = function(line, group = '', sourceGroup = '', bootst
     return result;
 };
 
+// Show endpoints while retaining the complete imported directives in DOM snapshots.
+window.dnsDisplay = function(line) {
+    const m = line.trim().match(/^(#\s*)?(server(?:-[a-z0-9]+)?)\s+("[^"]*"|'[^']*'|\S+)/);
+    if (!m) return line;
+    const schemes = {'server-tls':'dot://', 'server-quic':'doq://', 'server-tcp':'tcp://', 'server-h3':'h3://'};
+    return (m[1] ? '# ' : '') + (!m[3].includes('://') ? (schemes[m[2]] || '') : '') + m[3];
+};
+window.restoreDnsEditor = function(editor) {
+    if (!editor) return [];
+    const lines = editor.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const key = s => s.replace(/^#+\s*/, '');
+    const records = JSON.parse(editor.dataset.dnsRecords || '[]').map(raw => ({raw, display:dnsDisplay(raw), used:false}));
+    const result = lines.map(line => {
+        const record = records.find(r => !r.used && key(r.display) === key(line));
+        if (!record) return null;
+        record.used = true;
+        return (line.startsWith('#') ? '#' : '') + record.raw.replace(/^#+\s*/, '');
+    });
+    const pending = lines.map((line, i) => result[i] === null ? i : -1).filter(i => i >= 0);
+    const remaining = records.filter(r => !r.used);
+    if (pending.length && remaining.length && (pending.length !== 1 || remaining.length !== 1)) {
+        throw new Error('Изменяйте DNS-адреса по одному или используйте Raw: невозможно безопасно сопоставить дополнительные параметры серверов.');
+    }
+    if (pending.length === 1 && remaining.length === 1 && !/^#?\s*server(?:-|\s)/.test(lines[pending[0]])) {
+        const i = pending[0], line = lines[i], endpoint = key(line);
+        const parts = remaining[0].raw.replace(/^#+\s*/, '').match(/^(server(?:-[a-z0-9]+)?)\s+("[^"]*"|'[^']*'|\S+)(.*)$/);
+        if (parts) result[i] = (line.startsWith('#') ? '#' : '') + (endpoint.includes('://') ? formatDns(endpoint, '') : parts[1] + ' ' + endpoint) + parts[3];
+    }
+    return lines.map((line, i) => result[i] === null ? line : result[i]);
+};
+
 // === ГЕНЕРАТОРЫ HTML КАРТОЧЕК ===
 const UI = {
     escape: (str) => str ? str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '',
+    help: (text) => `<details class="setting-help" name="config-help" onclick="event.stopPropagation()"><summary aria-label="Пояснение" title="Что меняет эта настройка">?</summary><div class="setting-help-text" role="note"><button type="button" class="btn-close float-end ms-2" aria-label="Закрыть пояснение" onclick="this.closest('details').open=false"></button>${UI.escape(text)}</div></details>`,
     
     dnsServerRow: (value) => {
         const raw = (value || '').trim();
@@ -112,7 +144,7 @@ const UI = {
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
         const body = dnsSection
-            ? '<textarea id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.join('\n')) + '</textarea>'
+            ? '<textarea data-dns-records="' + UI.escape(JSON.stringify(linesArr)) + '" id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.map(dnsDisplay).join('\n')) + '</textarea>'
             : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\n')) + '</textarea>';
         return '<div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>' + title + '</span></div><div class="card-body p-0">' + (notice ? '<div class="p-2 text-muted small border-bottom">' + notice + '</div>' : '') + body + '</div></div>';
     },
@@ -182,14 +214,16 @@ const UI = {
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
             <div class="group-body">
-                <textarea class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\r?\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape(content || '')}</textarea>
+                <textarea data-dns-records="${UI.escape(JSON.stringify((content || '').split(/\r?\n/).filter(Boolean)))}" class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\r?\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape((content || '').split(/\r?\n/).map(dnsDisplay).join('\n'))}</textarea>
             </div>
         </div>`,
     coreCard: (data, rawLines) => `
         <div class="card bg-dark border-secondary mb-3 shadow-sm">
             <div class="card-header border-secondary section-header py-2"><span>Основные параметры (Core)</span></div>
             <div class="card-body p-3">
-                <div class="row mb-3 align-items-center">
+                ${UI.bindPortField(data)}
+                <div class="dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''} mb-3"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="useSimplifiedDnsBind()">Вернуться к одному полю порта</button><div class="small text-muted mt-2" id="dns-bind-mode-hint" role="status">Упрощённый режим доступен для одной совпадающей пары UDP/TCP без дополнительных аргументов.</div></div>
+                <div class="row mb-3 align-items-center dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Адрес и порт (bind):</label></div>
                     <div class="col-sm-6"><input type="text" id="core-bind" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.bind)}" oninput="markConfigDirty()"></div>
                 </div>
@@ -224,11 +258,59 @@ const UI = {
                         <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="speed-tcp80" ${data.speed_check_mode.includes('tcp:80') ? 'checked' : ''} onchange="markConfigDirty()"><label class="form-check-label small text-light">TCP 80</label></div>
                     </div>
                 </div>
-                <input type="hidden" id="sec-core-others" value="${UI.escape(rawLines.join('\n'))}">
+                ${UI.coreExtraFields(data)}
+                <label class="form-label small" for="sec-core-others">Дополнительные параметры Core ${UI.help('Дополнительные bind, отключённые строки и параметры без отдельного переключателя. Они сохраняются как написаны. Одна полная директива на строку; # отключает строку.')}</label>
+                <textarea id="sec-core-others" class="form-control code-font" rows="3" oninput="markConfigDirty()">${UI.escape(rawLines.join('\n'))}</textarea>
                 <input type="hidden" id="core-speed-original" value="${UI.escape(data.speed_check_mode)}" data-selection="${['tcp:443','tcp:80','ping'].filter(v => data.speed_check_mode.split(',').includes(v)).join(',')}">
             </div>
-        </div>`
+        </div>`,
+    coreExtraFields: data => `
+        <div class="row mb-3 dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}"><div class="col-sm-6"><label class="form-label small" for="core-bind-tcp">Адреса TCP DNS (bind-tcp)</label></div><div class="col-sm-6"><textarea id="core-bind-tcp" class="form-control form-control-sm code-font" rows="2" placeholder="Не задано" oninput="markConfigDirty()">${UI.escape(data.bind_tcp.join('\n'))}</textarea></div></div>
+        ${[['force-aaaa-soa','Блокировать IPv6-ответы (force-AAAA-SOA)',data.force_aaaa_soa],['cache-persist','Сохранять кэш на диск',data.cache_persist]].map(([id,label,value]) => `<div class="row mb-3"><div class="col-sm-6"><label class="form-label small" for="core-${id}">${label}</label></div><div class="col-sm-6"><select id="core-${id}" class="form-select form-select-sm" onchange="markConfigDirty()">${[['','Не задано (наследовать)'],['yes','Да'],['no','Нет'],...(['','yes','no'].includes(value)?[]:[[value,value+' (проверьте значение)']])].map(([v,text])=>`<option value="${UI.escape(v)}" ${v===value?'selected':''}>${UI.escape(text)}</option>`).join('')}</select></div></div>`).join('')}`
 };
+UI.bindPortField = data => `<div class="dns-bind-simple ${data.show_simple_bind?'':'d-none'}"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty()"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div></div></div><button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="useAdvancedDnsBind()">Расширенные настройки адресов</button></div>`;
+
+function useAdvancedDnsBind() {
+    const port = document.getElementById('core-dns-port');
+    if (port.dataset.simple === 'yes') {
+        const value = unifiedDnsBind(port);
+        document.getElementById('core-bind').value = value;
+        document.getElementById('core-bind-tcp').value = value;
+        port.dataset.simple = 'no';
+    }
+    document.querySelectorAll('.dns-bind-simple').forEach(el=>el.classList.add('d-none'));
+    document.querySelectorAll('.dns-bind-advanced').forEach(el=>el.classList.remove('d-none'));
+    saveDnsBindMode('advanced');
+    // Opening advanced controls alone is not a configuration change.
+}
+function saveDnsBindMode(mode) {
+    try { localStorage.setItem('smartdns-ui-bind-mode',mode); } catch (_) {}
+}
+function simpleDnsBind(bind, tcp, others) {
+    const match = bind.match(/^(\[::\]|\[::1\]|127\.0\.0\.1|0\.0\.0\.0|):(\d+)$/);
+    const extra = others.split(/\r?\n/).some(line=>/^\s*bind(?:-tcp)?\s/.test(line));
+    return match && !extra && tcp.length===1 && tcp[0]===bind && +match[2]>=1 && +match[2]<=65535
+        ? {prefix:match[1],port:match[2]} : null;
+}
+function useSimplifiedDnsBind() {
+    const bind = document.getElementById('core-bind').value.trim();
+    const tcp = document.getElementById('core-bind-tcp').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    const simple = simpleDnsBind(bind,tcp,document.getElementById('sec-core-others').value);
+    if (!simple) {
+        document.getElementById('dns-bind-mode-hint').textContent='Нельзя объединить текущие адреса: нужны одна одинаковая пара UDP/TCP без аргументов и без дополнительных bind. Настройки сохранены.';
+        return false;
+    }
+    const port = document.getElementById('core-dns-port');
+    port.value=simple.port; port.dataset.prefix=simple.prefix; port.dataset.simple='yes';
+    document.querySelectorAll('.dns-bind-simple').forEach(el=>el.classList.remove('d-none'));
+    document.querySelectorAll('.dns-bind-advanced').forEach(el=>el.classList.add('d-none'));
+    saveDnsBindMode('simple');
+    return true;
+}
+function unifiedDnsBind(port) {
+    if (!/^\d+$/.test(port.value) || +port.value<1 || +port.value>65535) throw new Error('Порт DNS должен быть целым числом от 1 до 65535.');
+    return port.dataset.prefix + ':' + Number(port.value);
+}
 
 window.getCollapsedDnsGroups = function() {
     try { return JSON.parse(localStorage.getItem('smartdns-ui-collapsed-groups') || '{}') || {}; }
@@ -306,15 +388,15 @@ window.toggleDnsGroup = function(button) {
 
 window.addNewGroupUI = () => {
     const cont = document.getElementById('dynamic-groups-container');
-    if (cont) { document.getElementById('no-groups-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.groupCard('', '')); refreshRouteGroupOptions(); markConfigDirty(); }
+    if (cont) { document.getElementById('no-groups-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.groupCard('', '')); addConfigHelp(cont); refreshRouteGroupOptions(); markConfigDirty(); }
 };
 window.addNewAddressUI = () => {
     const cont = document.getElementById('dynamic-addresses-container');
-    if (cont) { document.getElementById('no-addr-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.addressRow('', '')); markConfigDirty(); }
+    if (cont) { document.getElementById('no-addr-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.addressRow('', '')); addConfigHelp(cont); markConfigDirty(); }
 };
 window.addNewRouteUI = () => {
     const cont = document.getElementById('dynamic-routes-container');
-    if (cont) { document.getElementById('no-route-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.routeCard('', '', '')); refreshRouteGroupOptions(); markConfigDirty(); }
+    if (cont) { document.getElementById('no-route-msg')?.remove(); cont.insertAdjacentHTML('beforeend', UI.routeCard('', '', '')); addConfigHelp(cont); refreshRouteGroupOptions(); markConfigDirty(); }
 };
 
 
@@ -521,6 +603,57 @@ window.addDnsServerFromModal = function() {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('dns-server-modal')).hide();
 };
 
+// Browser-only help: no polling, router requests or SmartDNS work.
+function addConfigHelp(root) {
+    const fields = {
+        'core-dns-port': 'Один порт для входящих UDP и TCP DNS. Адреса IPv4/IPv6 сохраняются автоматически. Обычно нужен 53: другой порт требует перенастройки клиентов. Значение — целое число от 1 до 65535. Безопасное применение в текущей версии поддерживает только порт 53.',
+        'core-bind': 'Адрес и порт входящих UDP-запросов клиентов. :53 слушает IPv4; [::]:53 — IPv6 и, при разрешённом dual-stack в ОС, IPv4. Это не адрес вышестоящего DNS. Удаление или смена порта может лишить клиентов DNS.',
+        'core-bind-tcp': 'Входящий DNS по TCP: нужен для крупных ответов и клиентов, переключающихся с UDP на TCP. Одна пара адрес:порт с возможными аргументами на строку. Пустое поле удаляет bind-tcp. Это не принудительное использование TCP для upstream.',
+        'core-force-aaaa-soa': 'Да: вместо IPv6-адресов (AAAA) SmartDNS возвращает пустой ответ SOA. Клиенты обычно используют IPv4; IPv6-only сервисы могут перестать работать. Не отключает IPv6 на роутере и не мешает принимать DNS-запросы по IPv6.',
+        'core-cache-persist': 'Сохраняет кэш на диск для повторного использования после запуска. Да добавляет запись на накопитель; Нет отключает сохранение. Не задано оставляет поведение SmartDNS по умолчанию. Это не ограничение оперативной памяти.',
+        'core-cache-size': 'Количество записей в кэше, не мегабайты. Больше записей — больше повторных ответов без обращения к upstream, но выше расход RAM. Память одной записи различается; размер кэша не равен общему лимиту памяти SmartDNS. 0 отключает кэш, -1 включает автоматический размер. На роутере с 254 МБ учитывайте также nfqws2 и sing-box.',
+        'core-prefetch': 'Заранее обновляет популярные записи перед окончанием TTL. Повторные запросы чаще получают готовый ответ, но появляются дополнительные обращения к upstream и небольшая нагрузка. Выключение не отключает обычный кэш.',
+        'core-serve-expired': 'Разрешает ответить из кэша после окончания TTL и обновить запись в фоне. Может помочь при задержках upstream, но клиент временно получит устаревший IP. Не гарантирует работу при полном отказе DNS и не заменяет резервные серверы.',
+        'core-response-mode': 'fastest-response — быстрый ответ, предпочтение меньшей задержке DNS; first-ping — первый IP, подтвердивший доступность проверкой; fastest-ip — выбор IP по результатам проверки задержки. Проверка доступности зависит от speed-check-mode и может быть заблокирована сетью.',
+        'speed-ping': 'Проверяет доступность полученных IP через ICMP. Это задержка ответа, а не скорость скачивания. ICMP может быть запрещён сервером или сетью.',
+        'speed-tcp443': 'Проверяет задержку установки TCP-соединения к полученным IP на порту 443. Не проверяет содержимое сайта и не измеряет пропускную способность. Создаёт дополнительные соединения.',
+        'speed-tcp80': 'Проверяет задержку установки TCP-соединения к полученным IP на порту 80. Закрытый порт не означает, что HTTPS-сайт недоступен. Снятие всех стандартных проверок отключает их; нестандартные проверки из Raw сохраняются.',
+        'sec-logging-select': 'Подробность журнала. error/warn показывают проблемы; info — обычные события; debug создаёт много записей и увеличивает нагрузку и запись на накопитель. Выбор уровня не исправляет ошибки DNS.'
+    };
+    for (const [id,text] of Object.entries(fields)) {
+        const field = root.querySelector('#'+id);
+        if (!field) continue;
+        const row = field.closest('.row') || field.parentElement.parentElement;
+        const label = (id.startsWith('speed-') ? field.parentElement.querySelector('label') : row.querySelector('label'));
+        if (label && !label.querySelector('.setting-help')) label.insertAdjacentHTML('beforeend', UI.help(text));
+    }
+    const sections = {
+        'sec-bootstrap': 'Серверы для получения IP-адресов DoH/DoT, заданных именами. Роль задаётся аргументом -bootstrap-dns, а не положением строки. # отключает сервер. Остальные аргументы импортированной записи сохраняются при редактировании адреса.',
+        'sec-upstream': 'Серверы без явного -group. Членство в группах определяется аргументами, а не заголовками Raw. Серверы с -group тоже могут участвовать в default, если нет -exclude-default-group. UDP не шифруется; DoH/DoT шифруют соединение с DNS-сервером.',
+        'sec-fallback': 'Обычная группа с именем fallback. Само название не включает автоматическое переключение при отказе. Нужны правила, использующие эту группу.',
+        'dynamic-groups-container': 'Наборы upstream для правил nameserver. Имя группы само по себе не направляет трафик в VPN. Дополнительные параметры серверов сохраняются; для изменения аргументов используйте Raw.',
+        'dynamic-routes-container': 'Domain-set объединяет домены из файлов; nameserver выбирает для них DNS-группу. Это выбор DNS-резолвера, а не IP-маршрут или автоматическое переключение VPN.',
+        'dynamic-addresses-container': 'Ручные ответы вместо обращения к upstream. Несколько доменов разделяются /, IP — запятыми. # отключает запись. Ошибочный IP направит клиентов не на тот сервер.',
+        'sec-routing': 'Правила ipset/nftset добавляют полученные адреса в наборы для внешней маршрутизации. Требуют настроек ОС и firewall. Сохраняются полными строками.',
+        'sec-other': 'Директивы без отдельного визуального поля и пользовательские комментарии. Они не игнорируются: активные строки читает SmartDNS. Одна полная директива на строку.'
+    };
+    for (const [id,text] of Object.entries(sections)) {
+        const header = root.querySelector('#'+id)?.closest('.card')?.querySelector('.card-header > span');
+        if (header && !header.querySelector('.setting-help')) header.insertAdjacentHTML('beforeend',UI.help(text));
+    }
+    for (const [selector,text] of [
+        ['.group-editable-name','Имя DNS-группы. При переименовании обновляются ссылки маршрутов в этом редакторе.'],
+        ['.route-editable-name','Имя domain-set: связывает файлы доменов с правилом nameserver.'],
+        ['.route-files-list','Один или несколько файлов доменов этого набора. Изменение содержимого файла затрагивает все использующие его наборы.'],
+        ['.route-group','DNS-группа для доменов выбранных списков. Не является выбором сетевого интерфейса.'],
+        ['.addr-domain','Домены этой ручной записи; несколько доменов разделяются /. Правило применяется также к поддоменам по правилам SmartDNS.'],
+        ['.addr-ip','Один или несколько IPv4/IPv6 через запятую. Специальные ответы #, #4, #6 запрещают соответствующие типы; -, -4, -6 отменяют переопределение.']
+    ]) root.querySelectorAll(selector).forEach(field => {
+        if (field.nextElementSibling?.classList.contains('setting-help')) return;
+        field.insertAdjacentHTML('afterend',UI.help(text));
+    });
+}
+
 // === ОСНОВНОЙ ПАРСЕР ===
 function parseConfigToSections(content) {
     let coreLines = [], bootstrap = [], upstream = [], fallback = [], group = [], routing = [], other = [];
@@ -528,6 +661,7 @@ function parseConfigToSections(content) {
     let routesObj = {}; 
     let logging = { level: 'notice' };
     let coreData = { bind: ':53', cache_size: '65536', prefetch_domain: 'yes', serve_expired: 'yes', response_mode: 'fastest-response', speed_check_mode: '' };
+    Object.assign(coreData, {bind_tcp: [], force_aaaa_soa: '', cache_persist: ''});
     let seenBind = false;
 
     content.split(/\r?\n/).forEach(line => {
@@ -547,13 +681,16 @@ function parseConfigToSections(content) {
         
         const cmd = matchCmd[1];
 
-        if (['bind', 'cache-size', 'prefetch-domain', 'serve-expired', 'response-mode', 'speed-check-mode'].includes(cmd)) {
+        if (['bind', 'bind-tcp', 'force-AAAA-SOA', 'cache-persist', 'cache-size', 'prefetch-domain', 'serve-expired', 'response-mode', 'speed-check-mode'].includes(cmd)) {
             if (!isComment) {
                 const val = activeLine.substring(cmd.length).trim();
                 if (cmd === 'bind') {
                     if (seenBind) coreLines.push(originalTrimmed);
                     else { coreData.bind = val; seenBind = true; }
                 }
+                else if (cmd === 'bind-tcp') coreData.bind_tcp.push(val);
+                else if (cmd === 'force-AAAA-SOA') coreData.force_aaaa_soa = val;
+                else if (cmd === 'cache-persist') coreData.cache_persist = val;
                 else if (cmd === 'cache-size') coreData.cache_size = val;
                 else if (cmd === 'prefetch-domain') coreData.prefetch_domain = val;
                 else if (cmd === 'serve-expired') coreData.serve_expired = val;
@@ -613,6 +750,9 @@ function parseConfigToSections(content) {
         }
     });
 
+    coreData.simple_bind = simpleDnsBind(coreData.bind,coreData.bind_tcp,coreLines.join('\n'));
+    coreData.show_simple_bind = !!coreData.simple_bind;
+    try { if(localStorage.getItem('smartdns-ui-bind-mode')==='advanced') coreData.show_simple_bind=false; } catch (_) {}
     let bsClean = bootstrap;
     let upClean = upstream;
     let fallbackClean = fallback;
@@ -631,7 +771,7 @@ function parseConfigToSections(content) {
     let routesHtml = Object.keys(routesObj).map(r => UI.routeCard(r, routesObj[r].group, routesObj[r].files.join('\n'))).join('');
     let addrHtml = addresses.map(a => UI.addressRow(a.domain, a.ip, a.enabled)).join('');
 
-    return `
+    const html = `
     <div class="row">
         <div class="col-md-6">
             ${UI.coreCard(coreData, coreLines)}
@@ -672,18 +812,157 @@ function parseConfigToSections(content) {
             </div>
 
             ${routing.length > 0 ? UI.card('Прочая маршрутизация (ipset/nftset)', 'routing', routing) : ''}
-            ${other.length > 0 ? UI.card('Разное (Сюда улетают все комментарии)', 'other', other) : ''}
+            ${other.length > 0 ? UI.card('Разное', 'other', other) : ''}
         </div>
     </div>`;
+    if (typeof document.createElement !== 'function') return html;
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    addConfigHelp(container);
+    const baseline = gatherSectionsCanonical(container);
+    return container.innerHTML + '<input type="hidden" id="config-source-record" data-source="' + UI.escape(JSON.stringify(content)) + '" data-baseline="' + UI.escape(JSON.stringify(baseline)) + '">';
 }
 
 // === СБОРКА ФАЙЛА ПЕРЕД СОХРАНЕНИЕМ ===
 function gatherSectionsText() {
+    const generated = gatherSectionsCanonical();
+    const record = document.getElementById('config-source-record');
+    if (!record) throw new Error('Исходный файл редактора недоступен. Обновите страницу перед сохранением.');
+    return patchConfigSource(JSON.parse(record.dataset.source), JSON.parse(record.dataset.baseline), generated);
+}
+
+// Explicit formatting action; normal edits still preserve the original file layout.
+function organizeDnsSource(source) {
+    if (/^\s*(?:group-begin|group-end)\b/m.test(source)) throw new Error('Конфиг содержит области group-begin/group-end: раскладывайте DNS вручную, чтобы сохранить область действия.');
+    const newline = source.includes('\r\n') ? '\r\n' : '\n';
+    const finalNewline = source.endsWith('\n');
+    const lines = source.split(/\r?\n/);
+    if (finalNewline) lines.pop();
+    const headings = [
+        ['bootstrap','Bootstrap DNS'], ['upstream','Вышестоящие DNS (Основная группа)'],
+        ['fallback','DNS-группа fallback'], ['groups','Групповые записи']
+    ];
+    const section = line => {
+        const m = line.trim().match(/^#\s*(.*?)\s*#$/);
+        if (!m || /^#+$/.test(m[1])) return null;
+        if (m[1] === 'Резервные DNS (Fallback)') return 'fallback';
+        return headings.find(([,title])=>title===m[1])?.[0] || 'other';
+    };
+    const blocks = [], moves = new Map(headings.map(([id])=>[id,[]]));
+    const removed = new Set();
+    let current = null;
+    lines.forEach((line,index) => {
+        const id = section(line);
+        if (id) { current = id; blocks.push({id,index}); }
+        if (!/^\s*(?:#+\s*)?server(?:-(?:tls|https|quic|h3|tcp))?\s+/.test(line)) return;
+        const member = dnsMembership(line.trim());
+        const target = member.bootstrap ? 'bootstrap' : !member.groups.length ? 'upstream' : member.groups[0]==='fallback' ? 'fallback' : 'groups';
+        if (current !== target) { moves.get(target).push(line); removed.add(index); }
+    });
+    if (!removed.size) return source;
+    const insert = new Map();
+    const missing = [];
+    for (const [id,title] of headings) {
+        const records = moves.get(id);
+        if (!records.length) continue;
+        const block = blocks.find(b=>b.id===id);
+        if (!block) { missing.push('', '##########', '# '+title+' #', '##########', ...records); continue; }
+        const next = blocks.find(b=>b.index>block.index);
+        let end = next ? next.index : lines.length;
+        if (end && /^\s*#{3,}\s*$/.test(lines[end-1])) end--;
+        while (end>block.index+1 && !lines[end-1].trim()) end--;
+        insert.set(end, [...(insert.get(end)||[]), ...records]);
+    }
+    const result = [];
+    for (let i=0;i<=lines.length;i++) {
+        if (insert.has(i)) result.push(...insert.get(i));
+        if (i<lines.length && !removed.has(i)) result.push(lines[i]);
+    }
+    return result.concat(missing).join(newline)+(finalNewline?newline:'');
+}
+
+// Compare editor states, then apply only their actual changes to the source file.
+// Generated section headings never replace user headings, comments or whitespace.
+function patchConfigSource(source, baseline, edited) {
+    if (baseline === edited) return source;
+    const key = line => (line.trim().replace(/^#+\s*/, '# ').match(/"[^"]*"|'[^']*'|\S+/g) || []).join(' ');
+    const meaningful = text => text.split(/\r?\n/).filter(line => line.trim() &&
+        !/^#{3,}$/.test(line.trim()) && !/^# [^#]+ #$/.test(line.trim()));
+    const old = meaningful(baseline), next = meaningful(edited);
+    const original = source.split(/\r?\n/).map(text => ({text}));
+    const queues = new Map();
+    original.forEach(row => {
+        const k = key(row.text);
+        if (!queues.has(k)) queues.set(k, []);
+        queues.get(k).push(row);
+    });
+    const previous = old.map(text => ({text, row:(queues.get(key(text)) || []).shift(), used:false}));
+    const additions = [];
+    const nextRows = next.map((text, i) => {
+        const match = previous.find(row => !row.used && key(row.text) === key(text));
+        if (match) { match.used = true; return match.row; }
+        const addition = {text, index:i}; additions.push(addition); return null;
+    });
+    const family = text => {
+        const command = text.trim().replace(/^#+\s*/, '').split(/\s/)[0];
+        return /^server(?:-[a-z0-9]+)?$/.test(command) ? 'server' : command;
+    };
+    for (const removed of previous.filter(row => !row.used)) {
+        const replacement = additions.find(row => !row.used && family(row.text) === family(removed.text));
+        if (replacement && removed.row) {
+            // Preserve the indentation of the edited source line.
+            removed.row.text = (removed.row.text.match(/^\s*/) || [''])[0] + replacement.text.trim();
+            replacement.used = true;
+            nextRows[replacement.index] = removed.row;
+        } else if (removed.row) {
+            removed.row.deleted = true;
+        }
+    }
+    for (const addition of additions.filter(row => !row.used)) {
+        const row = {text:addition.text};
+        let anchor = null;
+        for (let i = addition.index - 1; i >= 0; i--) if (nextRows[i] && !nextRows[i].deleted) { anchor = nextRows[i]; break; }
+        if (anchor) original.splice(original.indexOf(anchor) + 1, 0, row);
+        else {
+            const following = nextRows.slice(addition.index + 1).find(item => item && !item.deleted);
+            if (following) original.splice(original.indexOf(following), 0, row);
+            else original.splice(original.length - (original.at(-1)?.text === '' ? 1 : 0), 0, row);
+        }
+        nextRows[addition.index] = row;
+    }
+    // Honour deliberate reordering, without applying the generator's section order.
+    const kept = previous.map(item => item.row).filter(row => row && !row.deleted && nextRows.includes(row));
+    const desired = nextRows.filter(row => kept.includes(row));
+    let first = 0, last = kept.length;
+    while (first < last && kept[first] === desired[first]) first++;
+    while (last > first && kept[last - 1] === desired[last - 1]) last--;
+    if (first < last) {
+        const positions = kept.slice(first, last).map(row => original.indexOf(row)).sort((a, b) => a - b);
+        desired.slice(first, last).forEach((row, i) => { original[positions[i]] = row; });
+    }
+    const newline = source.includes('\r\n') ? '\r\n' : '\n';
+    return original.filter(row => !row.deleted).map(row => row.text).join(newline);
+}
+
+function gatherSectionsCanonical(root = window.document) {
+    const document = {
+        getElementById: id => root.querySelector('#' + id),
+        querySelectorAll: selector => root.querySelectorAll(selector)
+    };
     let text = '';
     
     text += `##########\n# Основные параметры (Core) #\n##########\n`;
-    const bindValue = document.getElementById('core-bind').value.trim();
+    const unifiedPort = document.getElementById('core-dns-port');
+    const simpleBind = unifiedPort?.dataset.simple === 'yes' ? unifiedDnsBind(unifiedPort) : null;
+    const bindValue = simpleBind || document.getElementById('core-bind').value.trim();
     text += `bind ${/^\d+$/.test(bindValue) ? ':' + bindValue : bindValue}\n`;
+    (simpleBind ? [simpleBind] : document.getElementById('core-bind-tcp').value.split(/\r?\n/)).map(s=>s.trim()).filter(Boolean).forEach(value => {
+        text += `bind-tcp ${/^\d+$/.test(value)?':'+value:value}\n`;
+    });
+    for (const [id,command] of [['force-aaaa-soa','force-AAAA-SOA'],['cache-persist','cache-persist']]) {
+        const value = document.getElementById('core-'+id).value;
+        if (value) text += `${command} ${value}\n`;
+    }
     text += `cache-size ${document.getElementById('core-cache-size').value}\n`;
     text += `prefetch-domain ${document.getElementById('core-prefetch').checked ? 'yes' : 'no'}\n`;
     text += `serve-expired ${document.getElementById('core-serve-expired').checked ? 'yes' : 'no'}\n`;
@@ -708,7 +987,7 @@ function gatherSectionsText() {
 
     const collectDnsRows = id => {
         const editor = document.getElementById('sec-' + id);
-        return editor ? editor.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : [];
+        return restoreDnsEditor(editor);
     };
         const bsRows = collectDnsRows('bootstrap');
     if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDnsForSection(line, '', '', true) + '\n'; }); text += '\n'; }
@@ -722,7 +1001,7 @@ function gatherSectionsText() {
         grpItems.forEach(item => {
             let name = item.querySelector('.group-name-input').value.trim();
             const groupEditor = item.querySelector('.group-dns-list');
-            const dnsRows = groupEditor ? groupEditor.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean) : [];
+            const dnsRows = restoreDnsEditor(groupEditor);
             if (name && dnsRows.length) {
                 dnsRows.forEach(line => { text += formatDnsForSection(line, name, item.dataset.sourceGroup || name) + '\n'; });
             }
