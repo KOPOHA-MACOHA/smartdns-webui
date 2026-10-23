@@ -11,7 +11,7 @@ function option(name,short,    j,v,t) {
     }
     return ""
 }
-function group(name) {
+function preflight_group(name) {
     if(name!="" && name!="-" && name!="#") {
         if(name!~/^[A-Za-z0-9_.-]+$/)report("E",FNR,"Эта форма имени группы пока не поддержана нативной проверкой.")
         else usedgroup[name]=1
@@ -30,7 +30,7 @@ preflight {
     cmd=token[1]
     if(cmd ~ /^bind(-tcp|-tls|-https)?$/) {
         name=option("group","g");if(name=="")name="default"
-        group(name);if(primary=="")primary=name
+        preflight_group(name);if(primary=="")primary=name
         next
     }
     if(cmd ~ /^(cache-size|cache-mem-size|cache-file|cache-persist|cache-checkpoint-time|prefetch-domain|serve-expired|log-file|log-level|log-size|log-num|log-console|log-syslog|audit-enable|audit-file|audit-size|audit-num|audit-console|audit-syslog|audit-SOA|audit-log-SOA|debug-save-fail-packet|debug-save-fail-packet-dir|no-pidfile|no-daemon|restart-on-crash|max-query-limit)$/)next
@@ -56,7 +56,7 @@ preflight {
     if(cmd=="nameserver") {
         count=split(token[2],r,"/");name=r[count];if(name=="")name=r[count-1]
         if(name!="-" && name!="#") {
-            group(name);routecount++;routegroup[routecount]=name
+            preflight_group(name);routecount++;routegroup[routecount]=name
             if(count!=3) {report("E",FNR,"Сложная форма nameserver пока не поддержана нативной проверкой.");next}
             if(r[2]~/^domain-set:/) {set=r[2];sub(/^domain-set:/,"",set);routeset[routecount]=set}
             else if(r[2]~/^[A-Za-z0-9][A-Za-z0-9.-]*$/ && length(r[2])<=253)routedomain[routecount]=r[2]
@@ -69,7 +69,7 @@ END {
     if(errors)exit 1
     if(!upstreams || !literal) {report("E",0,"Для независимой нативной проверки нужен явный upstream с IP или host-ip; системный DNS не подставляется.");exit 1}
     if(primary=="")primary="default"
-    group(primary)
+    preflight_group(primary)
     if(routecount>8 || listcount>16) {report("E",0,"Слишком много маршрутов/списков для ограниченной проверки; конфиг не изменён.");exit 1}
     groups=0;for(name in usedgroup)groups++
     if(groups>8) {report("E",0,"Более 8 используемых групп: нужна отдельная ограниченная программа проверки.");exit 1}
