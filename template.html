@@ -27,6 +27,15 @@
             --accent-soft: #263f58; --field: #152231; --field-border: #40546a;
             --shadow: 0 2px 10px rgba(0, 0, 0, .12);
         }
+        .config-review { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+        .config-review::backdrop { background: rgba(0,0,0,.55); }
+        .config-review pre { background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 0; }
+        .config-diff-line { display: block; min-width: max-content; padding: 0 12px; }
+        .config-diff-remove { background: #ffebe9; color: #82071e; }
+        .config-diff-add { background: #dafbe1; color: #116329; }
+        .config-diff-gap { color: var(--muted); background: var(--surface-muted); }
+        :root[data-theme="dark"] .config-diff-remove { background: #48252d; color: #ffd0ce; }
+        :root[data-theme="dark"] .config-diff-add { background: #203e30; color: #aff5b4; }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--page); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; }
         .navbar { min-height: 64px; padding: 0 22px; background: var(--surface) !important; border-color: var(--line) !important; box-shadow: var(--shadow); }
@@ -627,6 +636,14 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
     }
 }
 
+        .setting-help { display:inline-block; position:relative; margin-inline-start:.4rem; vertical-align:middle; font-weight:normal; }
+        .setting-help > summary { display:inline-flex; align-items:center; justify-content:center; width:1.15rem; height:1.15rem; border:1px solid currentColor; border-radius:50%; cursor:pointer; font-size:.75rem; color:var(--muted); list-style:none; }
+        .setting-help > summary::-webkit-details-marker { display:none; }
+        .setting-help > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+        .setting-help[open] { z-index:1050; }
+        .setting-help-text { position:fixed; left:50%; transform:translateX(-50%); bottom:1rem; width:min(38rem,calc(100vw - 2rem)); max-height:60vh; overflow:auto; z-index:1090; padding:1rem; border:1px solid var(--line); border-radius:.4rem; background:var(--surface); color:var(--text); box-shadow:0 4px 18px #0004; font-size:.9rem; line-height:1.5; white-space:normal; text-align:start; }
+        .setting-help[open] > summary { color:var(--accent); background:var(--accent-soft); }
+        :root[data-theme="dark"] .setting-help .btn-close { filter:invert(1); }
 </style>
 </head>
 <body>
@@ -654,8 +671,10 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
             <button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="globalSave()" disabled>
                 <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
             </button>
+            <button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button>
+            <button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button>
             <button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
-                <i class="bi bi-arrow-repeat me-1"></i> Рестарт
+                <i class="bi bi-arrow-repeat me-1"></i> Применить
             </button>
         </div>
     </div>
@@ -688,6 +707,9 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
                     <div id="config-sections"></div>
                 </div>
                 <div id="settings-raw-view" style="display:none;">
+                    <div class="d-flex justify-content-end mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" title="Перенести DNS-строки под соответствующие заголовки; изменения останутся в редакторе до сохранения">Разложить DNS по блокам</button>
+                    </div>
                     <textarea id="raw-config-text" class="form-control code-font" rows="25" oninput="markConfigDirty()"></textarea>
                 </div>
             </div>
@@ -777,9 +799,11 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=24"></script>
-<script src="validator.js?v=1"></script>
+<script src="parser.js?v=29"></script>
+<script src="validator.js?v=3"></script>
 <script src="version.js?v=1"></script>
-<script src="app.js?v=18"></script>
+<script src="config-review.js?v=5"></script>
+<script src="safe-apply.js?v=2"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

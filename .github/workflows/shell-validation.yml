@@ -27,9 +27,14 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check app.js
+          node --check safe-apply.js
+          node --check config-review.js
           node --check parser.js
           node --check validator.js
           node --check version.js
+
+      - name: Install test dependencies
+        run: npm ci
 
       - name: Run JavaScript regression tests when present
         run: |
@@ -48,6 +53,22 @@ jobs:
               echo "Checking syntax: $file"
               sh -n "$file"
             done
+
+      - name: Test guarded config saves on disposable files
+        run: sh tests/config-save.test.sh
+
+      - name: Test version-aware validation on disposable files
+        run: sh tests/validator.test.sh
+
+      - name: Test isolated native configuration preparation
+        run: sh tests/preflight-prepare.test.sh
+
+      - name: Test guarded application with disposable files and mocked service
+        run: |
+          sh tests/apply-plan.test.sh
+          sh tests/apply-health.test.sh
+          timeout 40 sh tests/apply-api.test.sh
+          timeout 120 sh tests/apply.test.sh
 
       - name: Run ShellCheck on shell scripts and CGI entry points
         run: |

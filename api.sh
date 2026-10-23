@@ -201,33 +201,261 @@ acquire_update_lock() {
     return 1
 }
 
+validate_config_file() (
+    candidate=$1
+    [ -r "$BASE_DIR/validator.awk" ] && [ -r "$BASE_DIR/validator-46.1.txt" ] || {
+        printf 'E\t0\tФайлы серверного валидатора недоступны.\n'; exit 1;
+    }
+    version=$(/opt/sbin/smartdns -v 2>/dev/null | awk '$1=="smartdns" {print $2; exit}')
+    [ "$TEST_MODE" != 1 ] || version=${VALIDATOR_TEST_VERSION:-$version}
+    [ -n "$version" ] || version=unknown
+    result=$(mktemp "${candidate}.validation.XXXXXX") || exit 1
+    trap 'rm -f "$result"' EXIT
+    rc=0
+    awk -v version="$version" -f "$BASE_DIR/validator.awk" "$BASE_DIR/validator-46.1.txt" "$candidate" > "$result" || rc=$?
+    [ "$rc" -le 1 ] || { printf 'E\t0\tОшибка выполнения серверного валидатора.\n'; exit 1; }
+    tab=$(printf '\t')
+    while IFS="$tab" read -r level line message; do
+        if [ "$level" = FILE ]; then
+            case "$message" in
+                /*) file=$message ;;
+                *) file="$(dirname "$CONF_FILE")/$message" ;;
+            esac
+            case "$file" in
+                *\**|*\?*|*\[* ) printf 'W\t%s\tШаблон пути списка не проверен: %s\n' "$line" "$message" ;;
+                *) if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+                    printf 'E\t%s\tФайл списка недоступен: %s\n' "$line" "$message"
+                    rc=1
+                fi ;;
+            esac
+        else printf '%s\t%s\t%s\n' "$level" "$line" "$message"; fi
+    done < "$result"
+    exit "$rc"
+)
+
+validate_config_request() (
+    umask 077
+    candidate=$(mktemp "${CONF_FILE}.check.XXXXXX") || { printf 'E\t0\tНе удалось создать временный файл проверки.\n'; exit 1; }
+    trap 'rm -f "$candidate"' EXIT
+    cat > "$candidate" || exit 1
+    validate_config_file "$candidate"
+)
+
+preflight_config_request() (
+    umask 077
+    candidate=$(mktemp "${CONF_FILE}.preflight.XXXXXX") || exit 1
+    result="${candidate}.result"
+    trap 'rm -f "$candidate" "$result"' EXIT
+    cat > "$candidate" || exit 1
+    if [ "$(wc -c < "$candidate")" -gt 262144 ]; then
+        printf 'PROFILE\t46.1\tpreflight\nE\t0\tКандидат больше 256 КБ; проверка не запущена.\n'; exit 1
+    fi
+    rc=0
+    /opt/bin/timeout -k 3 45 /opt/bin/nice -n 10 /bin/sh "$BASE_DIR/preflight.sh" "$candidate" "$(dirname "$CONF_FILE")" > "$result" 2>/dev/null || rc=$?
+    cat "$result"
+    if [ "$rc" != 0 ] && ! grep -q "^E$(printf '\t')" "$result"; then
+        printf 'E\t0\tНативная проверка не завершилась успешно или превысила лимит времени. Рабочий DNS не менялся.\n'
+    fi
+    exit "$rc"
+)
+
+guarded_restart() (
+    umask 077
+    lock=/tmp/smartdns-webui-dns-operation.lock
+    mkdir "$lock" 2>/dev/null || { echo 'BUSY: DNS test or service operation in progress'; exit 1; }
+    trap 'rm -f "$lock/owner"; rmdir "$lock"' EXIT
+    trap 'exit 1' HUP INT TERM
+    printf '%s\n' "$$" > "$lock/owner" || exit 1
+    restart_smartdns
+)
+
+config_hash() {
+    hash_output=$(sha256sum "$1") || return 1
+    printf '%s\n' "${hash_output%% *}"
+}
+
+# Hash and content must describe the same copy, even during another writer's rename.
+config_snapshot() (
+    umask 077
+    snapshot=$(mktemp "${CONF_FILE}.read.XXXXXX") || { echo 'ERROR: snapshot'; exit 1; }
+    trap 'rm -f "$snapshot"' EXIT
+    cp "$CONF_FILE" "$snapshot" || { echo 'ERROR: read config'; exit 1; }
+    revision=$(config_hash "$snapshot") || exit 1
+    printf 'REVISION %s\n' "$revision"
+    cat "$snapshot"
+)
+
+# All WebUI writers share this lock. External writers are detected by checksum;
+# external tools must cooperate with the lock for a fully atomic compare-and-swap.
+guarded_config_save() (
+    umask 077
+    expected=${HTTP_X_CONFIG_REVISION:-}
+    case "$expected" in ''|*[!0-9a-f]*) echo 'ERROR: missing or invalid revision'; exit 1 ;; esac
+    [ "${#expected}" = 64 ] || { echo 'ERROR: invalid revision'; exit 1; }
+    lock="${CONF_FILE}.webui-lock"
+    mkdir "$lock" 2>/dev/null || { echo 'BUSY: another save is in progress'; exit 1; }
+    temp=''
+    trap '[ -z "$temp" ] || rm -f "$temp"; rmdir "$lock"' EXIT
+    trap 'exit 1' HUP INT TERM
+    [ -f "$CONF_FILE" ] && [ ! -L "$CONF_FILE" ] || { echo 'ERROR: config is missing or is a symlink'; exit 1; }
+    current=$(config_hash "$CONF_FILE") || exit 1
+    [ "$expected" = "$current" ] || { echo 'CONFLICT: config has changed; reload before saving'; exit 1; }
+    temp=$(mktemp "${CONF_FILE}.write.XXXXXX") || { echo 'ERROR: temporary file'; exit 1; }
+    cp -p "$CONF_FILE" "$temp" || { echo 'ERROR: preserve config permissions'; exit 1; }
+    cat > "$temp" || { echo 'ERROR: write temporary file'; exit 1; }
+    validation=$(validate_config_file "$temp") || {
+        printf 'VALIDATION_FAILED\n%s\n' "$validation"; exit 1;
+    }
+    new_revision=$(config_hash "$temp") || exit 1
+    if [ "$new_revision" = "$expected" ]; then printf 'OK\nREVISION %s\n' "$expected"; exit 0; fi
+    if [ "$TEST_MODE" = 1 ]; then
+        backup_dir="${CONFIG_BACKUP_DIR:-/opt/tmp/smartdns-webui-test-backups}"
+    else
+        backup_dir=/opt/var/backups/smartdns-webui/config
+    fi
+    mkdir -p "$backup_dir" || { echo 'ERROR: backup directory'; exit 1; }
+    backup=$(mktemp "$backup_dir/config-$(date +%Y%m%d-%H%M%S).XXXXXX") || { echo 'ERROR: backup file'; exit 1; }
+    if ! cp "$CONF_FILE" "$backup" || [ "$(config_hash "$backup")" != "$expected" ]; then
+        rm -f "$backup"
+        echo 'CONFLICT: could not back up expected config'; exit 1
+    fi
+    [ "$(config_hash "$CONF_FILE")" = "$expected" ] || { echo 'CONFLICT: config changed during save'; exit 1; }
+    mv -f "$temp" "$CONF_FILE" || { echo 'ERROR: atomic replacement'; exit 1; }
+    temp=''
+    printf 'OK\nREVISION %s\nBACKUP %s\n' "$new_revision" "$backup"
+    # Keep the 20 latest copies; names are generated above, never supplied by HTTP.
+    ls -1t "$backup_dir"/config-* 2>/dev/null | (
+        count=1
+        while IFS= read -r old_backup; do
+            [ "$old_backup" = "$backup" ] && continue
+            count=$((count + 1))
+            [ "$count" -le 20 ] || rm -f "$old_backup"
+        done
+    )
+)
+
+guarded_list_request() (
+    valid_list_target "$2" || { echo 'ERROR: invalid list filename'; exit 1; }
+    lock="$CONF_FILE.webui-lock"
+    mkdir "$lock" 2>/dev/null || { echo 'BUSY: configuration operation in progress'; exit 1; }
+    trap 'rmdir "$lock"' EXIT
+    [ ! -d /tmp/smartdns-webui-dns-operation.lock ] || { echo 'BUSY: DNS operation in progress'; exit 1; }
+    case "$1" in
+        save) atomic_save "${DOMAINS_DIR}$2" || { echo 'ERROR: save_list failed'; exit 1; } ;;
+        delete) [ -f "${DOMAINS_DIR}$2" ] && rm -f "${DOMAINS_DIR}$2" || { echo 'ERROR: delete_list failed'; exit 1; } ;;
+        *) exit 1 ;;
+    esac
+    echo OK
+)
+
+apply_request() (
+    umask 077
+    [ "$TEST_MODE" != 1 ] || { echo 'ERROR: apply disabled in UI test mode'; exit 1; }
+    # Feature activation is explicit; delivery of UI files alone cannot enable it.
+    [ -f /opt/etc/smartdns/webui-safe-apply.enabled ] || { echo 'ERROR: safe apply has not been enabled on this router'; exit 1; }
+    expected=${HTTP_X_CONFIG_REVISION:-}
+    case "$expected" in ''|*[!0-9a-f]*) echo 'ERROR: invalid revision'; exit 1 ;; esac
+    [ "${#expected}" = 64 ] || exit 1
+    [ -f "$CONF_FILE" ] && [ ! -L "$CONF_FILE" ] || exit 1
+    [ "$(wc -c < "$CONF_FILE")" -le 262144 ] || { echo 'ERROR: baseline exceeds 256 KiB'; exit 1; }
+    lock=/tmp/smartdns-webui-dns-operation.lock
+    mkdir "$lock" 2>/dev/null || { echo 'BUSY: DNS operation in progress'; exit 1; }
+    handed=0; config_locked=0; tx=''
+    cleanup_apply_request() {
+        if [ "$handed" = 0 ]; then
+            rm -f "$lock/owner" "$lock/transaction"; rmdir "$lock" 2>/dev/null || true
+            [ "$config_locked" = 0 ] || rmdir "$CONF_FILE.webui-lock" 2>/dev/null || true
+        fi
+    }
+    trap cleanup_apply_request EXIT
+    trap 'exit 1' HUP INT TERM
+    mkdir "$CONF_FILE.webui-lock" 2>/dev/null || { echo 'BUSY: configuration save in progress'; exit 1; }
+    config_locked=1
+    root=/opt/var/backups/smartdns-webui/apply
+    mkdir -p "$root" && chmod 700 "$root" || exit 1
+    # Refuse unresolved journals, including those surviving a reboot.
+    for journal in "$root"/tx-*/status; do
+        [ -f "$journal" ] || continue
+        case "$(cat "$journal")" in COMMITTED|ROLLED_BACK|REJECTED) ;; *) echo 'ERROR: unresolved apply journal; inspect through SSH'; exit 1 ;; esac
+    done
+    count=$(find "$root" -mindepth 1 -maxdepth 1 -type d | wc -l)
+    [ "$count" -lt 20 ] || { echo 'ERROR: apply history limit reached; archive journals through SSH'; exit 1; }
+    tx=$(mktemp -d "$root/tx-XXXXXXXXXXXX") || exit 1
+    cp -p "$CONF_FILE" "$tx/candidate" && cat > "$tx/candidate" || exit 1
+    [ "$(wc -c < "$tx/candidate")" -le 262144 ] || { echo 'ERROR: candidate exceeds 256 KiB'; exit 1; }
+    validation=$(validate_config_file "$tx/candidate") || { printf 'VALIDATION_FAILED\n%s\n' "$validation"; exit 1; }
+    cp -p "$CONF_FILE" "$tx/before.conf" || exit 1
+    [ "$(config_hash "$tx/before.conf")" = "$expected" ] && [ "$(config_hash "$CONF_FILE")" = "$expected" ] || { echo 'CONFLICT: configuration changed'; exit 1; }
+    # Restrict sensitive snapshots, preserve original mode separately for installation.
+    cp -p "$CONF_FILE" "$tx/mode-reference" && : > "$tx/mode-reference" || exit 1
+    chmod 600 "$tx/before.conf" "$tx/candidate" || exit 1
+    printf '%s\n' "$expected" > "$tx/before.sha"
+    config_hash "$tx/candidate" > "$tx/candidate.sha"
+    printf '%s\n' "$(( $(date +%s) + 180 ))" > "$tx/deadline"
+    printf 'ARMING\n' > "$tx/status"
+    printf '%s\n' "$tx" > "$lock/transaction"
+    # Transfer responsibility BEFORE launching: the CGI must never remove guard locks.
+    handed=1
+    nohup /bin/sh "$BASE_DIR/apply.sh" guard "$tx" </dev/null > "$tx/guard.log" 2>&1 &
+    guard=$!
+    n=0
+    while [ ! -f "$tx/armed" ] && [ "$n" -lt 4 ]; do sleep 1; n=$((n+1)); done
+    [ -f "$tx/armed" ] && kill -0 "$guard" 2>/dev/null || { echo 'ERROR: rollback guard not armed; inspect journal'; exit 1; }
+    nohup /bin/sh "$BASE_DIR/apply.sh" worker "$tx" </dev/null > "$tx/worker.log" 2>&1 &
+    worker=$!
+    printf '%s\n' "$worker" > "$tx/worker.pid"
+    awk '{print $22}' "/proc/$worker/stat" > "$tx/worker.stamp"
+    printf 'OK\nTRANSACTION %s\n' "${tx##*/}"
+)
+
+apply_control() (
+    [ "$TEST_MODE" != 1 ] || { echo 'ERROR: apply disabled in UI test mode'; exit 1; }
+    id=${1:-}
+    case "$id" in tx-????????????) ;; *) echo 'ERROR: invalid transaction'; exit 1 ;; esac
+    case "$id" in *[!A-Za-z0-9-]*) exit 1 ;; esac
+    tx="/opt/var/backups/smartdns-webui/apply/$id"
+    [ -d "$tx" ] && [ ! -L "$tx" ] && [ -f "$tx/status" ] || { echo 'ERROR: transaction not found'; exit 1; }
+    case "$2" in
+        confirm)
+            [ "$(cat "$tx/status")" = AWAITING_CONFIRMATION ] && [ -f "$tx/healthy" ] && [ "$(date +%s)" -lt "$(cat "$tx/deadline")" ] || { echo 'ERROR: not awaiting confirmation'; exit 1; }
+            touch "$tx/confirm" || exit 1 ;;
+        abort) touch "$tx/abort" || exit 1 ;;
+    esac
+    printf 'STATUS %s\nDEADLINE %s\n' "$(cat "$tx/status")" "$(cat "$tx/deadline")"
+)
+
 handle_api() {
-    ACTION="$1"
-    TARGET="$2"
+    ACTION="${1:-}"
+    TARGET="${2:-}"
 
     case "$ACTION" in
+        "get_active_apply")
+            transaction=$(cat /tmp/smartdns-webui-dns-operation.lock/transaction 2>/dev/null || true)
+            case "$transaction" in
+                /opt/var/backups/smartdns-webui/apply/tx-*) printf 'TRANSACTION %s\n' "${transaction##*/}" ;;
+                *) echo NONE ;;
+            esac ;;
+        "apply_config") apply_request ;;
+        "get_apply_status") apply_control "$TARGET" status ;;
+        "confirm_apply") apply_control "$TARGET" confirm ;;
+        "abort_apply") apply_control "$TARGET" abort ;;
+        "preflight_config")
+            preflight_config_request
+            ;;
+        "validate_config")
+            validate_config_request
+            ;;
         "save_config")
-            if atomic_save "$CONF_FILE"; then echo "OK"; else echo "ERROR: save_config failed"; fi
+            guarded_config_save
+            ;;
+        "get_config_snapshot")
+            config_snapshot
             ;;
         "save_list")
-            if ! valid_list_target "$TARGET"; then
-                echo "ERROR: invalid list filename"
-            elif atomic_save "${DOMAINS_DIR}${TARGET}"; then
-                echo "OK"
-            else
-                echo "ERROR: save_list failed"
-            fi
+            guarded_list_request save "$TARGET"
             ;;
         "delete_list")
-            if ! valid_list_target "$TARGET"; then
-                echo "ERROR: invalid list filename"
-            elif [ -f "${DOMAINS_DIR}${TARGET}" ] && rm -f "${DOMAINS_DIR}${TARGET}"; then
-                echo "OK"
-            elif [ ! -e "${DOMAINS_DIR}${TARGET}" ]; then
-                echo "ERROR: list not found"
-            else
-                echo "ERROR: delete_list failed"
-            fi
+            guarded_list_request delete "$TARGET"
             ;;
         "clear_log")
             if : > "$LOG_FILE"; then echo "OK"; else echo "ERROR: clear_log failed"; fi
@@ -236,10 +464,8 @@ handle_api() {
             if [ "$TEST_MODE" = "1" ]; then
                 logger 'SmartDNS WebUI: Фейковый рестарт (TEST MODE)'
                 echo "OK"
-            elif restart_smartdns; then
-                echo "OK"
             else
-                echo "ERROR: SmartDNS restart was not confirmed. See /opt/var/log/smartdns-webui-service.log"
+                echo "ERROR: use guarded apply_config; unguarded restart is disabled"
             fi
             ;;
         "get_config")

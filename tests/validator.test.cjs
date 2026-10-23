@@ -53,3 +53,15 @@ test('reports missing -group argument but leaves unknown directives alone', () =
     assert.equal(result.errors.length, 1);
     assert.match(result.errors[0], /-group/);
 });
+
+test('server report separates errors, warnings and disabled information, failing closed on invalid output',()=>{
+    const {parseValidationReport}=require('../validator.js');
+    const result=parseValidationReport('PROFILE\t46.1\tstatic\nW\t3\tunsupported\nI\t4\tdisabled\nE\t5\tmissing group\n');
+    assert.equal(result.profile,'46.1');assert.equal(result.errors.length,1);assert.equal(result.warnings.length,1);assert.equal(result.info.length,1);
+    assert.match(result.errors[0],/Строка 5/);
+    assert(parseValidationReport('server crashed').errors.length>0);
+    assert(parseValidationReport('').errors.length>0);
+});
+test('accepts upstream-defined automatic cache size -1',()=>{
+    assert.deepEqual(validateSmartDnsConfig('cache-size -1').errors,[]);
+});

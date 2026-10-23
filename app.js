@@ -12,6 +12,9 @@ function resetToHome() {
 }
 
 let originalConfigContent = ''; 
+let configRevision = '';
+let configSnapshotMode = false;
+let preflightBusy = false;
 let originalListContent = '';
 
 const settingsUndoHistory = {
@@ -170,24 +173,28 @@ function redoSettingsChange() {
 function toggleTestMode(enabled) { isTestMode = enabled; }
 
 // Центральный обработчик API
-async function apiCall(action, target = null, body = null) {
+async function apiCall(action, target = null, body = null, strict = false, revision = '') {
     const headers = { 
         'X-API': '1', 
         'X-Action': action,
         'X-Test-Mode': isTestMode ? '1' : '0' 
     };
     if (target) headers['X-Target'] = target;
+    if (revision) headers['X-Config-Revision'] = revision;
     
     try {
         const response = await fetch('/index.cgi', { method: 'POST', headers, body });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         const text = await response.text();
         
         if (text.includes('<!DOCTYPE html>')) {
+            if (strict) throw new Error('Вместо конфигурации получена HTML-страница.');
             console.error('API вернуло HTML вместо данных! Проверьте index.cgi');
             return action.startsWith('get_') ? '' : false;
         }
-        return action.startsWith('get_') ? text : (action === 'restart_service' ? text.trim() : (text.trim() === 'OK'));
+        return action.startsWith('get_') || ['save_config', 'validate_config', 'preflight_config', 'apply_config', 'confirm_apply', 'abort_apply'].includes(action) ? text : (action === 'restart_service' ? text.trim() : (text.trim() === 'OK'));
     } catch (e) {
+        if (strict) throw e;
         console.error("API Error:", e);
         return action.startsWith('get_') ? '' : false;
     }
@@ -279,7 +286,9 @@ function organizeConfigSections() {
         panels[target].appendChild(card);
     });
     row.remove();
+    const sourceRecord = root.querySelector('#config-source-record');
     root.replaceChildren(nav, panels.core, panels.groups, panels.routing);
+    if (sourceRecord) root.append(sourceRecord);
     let active = 'core';
     try {
         const saved = localStorage.getItem('smartdns-ui-active-subtab');
@@ -287,6 +296,27 @@ function organizeConfigSections() {
     } catch (_) {}
     switchConfigSubtab(active, nav.querySelector('[data-subtab="' + active + '"]'));
     if (typeof window.applyDnsGroupCollapseState === 'function') window.applyDnsGroupCollapseState();
+}
+
+function organizeDnsBlocks() {
+    try {
+        const rawMode = currentSettingsMode === 'raw';
+        const source = rawMode ? (rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value) : gatherSectionsText();
+        const organized = organizeDnsSource(source);
+        if (organized === source) return;
+        if (rawMode) {
+            document.getElementById('raw-config-text').value = organized;
+            if (rawEditor) rawEditor.setValue(organized);
+        } else {
+            document.getElementById('config-sections').innerHTML = parseConfigToSections(organized);
+            organizeConfigSections();
+            refreshRouteGroupOptions();
+            if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
+            document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
+            initSortable();
+        }
+        markConfigDirty();
+    } catch (error) { alert(error.message); }
 }
 
 function switchSettingsMode(mode) {
@@ -311,7 +341,7 @@ function switchSettingsMode(mode) {
               start: [
                 {regex: /#.*/, token: "comment"},
                 {regex: /^(server(?:-[a-z0-9]+)?)\b/, token: "keyword"}, 
-                {regex: /^(bind|cache-size|prefetch-domain|serve-expired|response-mode|speed-check-mode|log-level|address|domain-set|nameserver|ipset|nftset)\b/, token: "builtin"},
+                {regex: /^(bind-tcp|bind|force-AAAA-SOA|cache-persist|cache-size|prefetch-domain|serve-expired|response-mode|speed-check-mode|log-level|address|domain-set|nameserver|ipset|nftset)\b/, token: "builtin"},
                 {regex: /-(group|bootstrap-dns|exclude-default-group|name|file|e)\b/, token: "attribute"}, 
                 {regex: /(?:https|tls|quic|h3|tcp):\/\/[^\s]+/, token: "string"}, 
                 {regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/, token: "number"} 
@@ -407,123 +437,76 @@ window.addEventListener('popstate', (e) => {
 
 // === ЛОГИЧЕСКАЯ И СИНТАКСИЧЕСКАЯ ВАЛИДАЦИЯ КОНФИГА ===
 async function validateConfigLogical(text) {
-    if (currentSettingsMode === 'ui') {
-        const definedGroups = new Set(Array.from(document.querySelectorAll('.group-name-input'))
-            .map(input => input.value.trim()).filter(Boolean));
-        for (const [index, item] of Array.from(document.querySelectorAll('.route-item')).entries()) {
-            const routeName = item.querySelector('.route-name')?.value.trim() || '';
-            const group = item.querySelector('.route-group')?.value.trim() || '';
-            const fileSelects = Array.from(item.querySelectorAll('.route-file-select'));
-            const files = fileSelects.map(select => select.value.trim());
-            if (!routeName) return `Маршрут №${index + 1}: укажите имя набора или удалите незаполненный маршрут.`;
-            if (!group) return `Маршрут "${routeName}": выберите DNS-группу.`;
-            if (!definedGroups.has(group)) return `Маршрут "${routeName}": DNS-группа "${group}" не создана. Сначала создайте группу или выберите существующую.`;
-            if (!fileSelects.length || files.some(file => !file) || !files.some(Boolean)) {
-                return `Маршрут "${routeName}": выберите список для каждого добавленного поля или удалите пустое поле списка.`;
-            }
-        }
+    if (currentSettingsMode !== 'ui') return null;
+    const names = new Set();
+    for (const item of document.querySelectorAll('.group-item')) {
+        const name = item.querySelector('.group-name-input').value.trim();
+        if (!name) return 'Укажите имя DNS-группы или удалите незаполненную карточку.';
+        if (names.has(name)) return 'Карточка DNS-группы «' + name + '» повторяется.';
+        names.add(name);
     }
-    const lines = text.split('\n');
-    const validServers = ['server', 'server-tcp', 'server-tls', 'server-https', 'server-quic', 'server-h3'];
-    let groupNames;
-    if (currentSettingsMode === 'ui') {
-        groupNames = Array.from(document.querySelectorAll('.group-name-input'))
-            .map(input => input.value.trim())
-            .filter(Boolean);
-    } else {
-        // Raw mode must validate names from the text being saved, not stale UI inputs.
-        const rawGroupNames = [];
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) continue;
-            const cmd = trimmed.split(/\s+/)[0];
-            if (!validServers.includes(cmd)) continue;
-            const regex = /(?:\s|^)-group\s+([^\s]+)/g;
-            let match;
-            while ((match = regex.exec(trimmed)) !== null) rawGroupNames.push(match[1]);
-        }
-        groupNames = Array.from(new Set(rawGroupNames));
+    for (const [index, item] of Array.from(document.querySelectorAll('.route-item')).entries()) {
+        if (!item.querySelector('.route-name')?.value.trim()) return 'Маршрут №' + (index + 1) + ': укажите имя набора.';
+        if (!item.querySelector('.route-group')?.value.trim()) return 'Маршрут №' + (index + 1) + ': выберите группу.';
+        const files = Array.from(item.querySelectorAll('.route-file-select'));
+        if (!files.length || files.some(input => !input.value.trim())) return 'Маршрут №' + (index + 1) + ': выберите все списки.';
     }
-    const invalidGroupName = groupNames.find(name => !/^[A-Za-z0-9_.-]+$/.test(name));
-    if (invalidGroupName) {
-        return `Некорректное имя DNS-группы: "${invalidGroupName}".\nИспользуйте только латинские буквы, цифры, точку, дефис и подчёркивание. Пробелы не допускаются.`;
-    }
-    if (currentSettingsMode === 'ui') {
-        const seenGroupNames = new Set();
-        for (const name of groupNames) {
-            if (seenGroupNames.has(name)) {
-                return `DNS-группа "${name}" указана несколько раз. Имена групп должны быть уникальными.`;
-            }
-            seenGroupNames.add(name);
-        }
-    }
-    
-    let definedGroups = ['fallback', '#', '-']; 
-    let usedLists = [];
-    
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line || line.startsWith('#')) continue;
-        
-        const cmd = line.split(/\s+/)[0];
-        
-        if (cmd.startsWith('server-') && !validServers.includes(cmd)) {
-            return `Ошибка в строке ${i + 1}:\n"${line}"\nНесуществующая директива '${cmd}'!`;
-        }
+    return null;
+}
 
-        if (validServers.includes(cmd)) {
-            const regex = /(?:\s|^)-group\s+([^\s]+)/g;
-            let match;
-            while ((match = regex.exec(line)) !== null) {
-                definedGroups.push(match[1]);
-            }
-        }
+async function validateConfigOnServer(content) {
+    return window.parseValidationReport(await apiCall('validate_config', null, content, true));
+}
+
+async function validateCurrentConfig() {
+    if (activeTab !== 'settings') { alert('Перейдите в настройки для проверки конфигурации.'); return; }
+    try {
+        const content = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
+        await window.reviewValidationReport(await validateConfigOnServer(content), true);
+    } catch (error) { alert('Проверка не выполнена: ' + error.message); }
+}
+
+async function preflightCurrentConfig() {
+    if (activeTab !== 'settings' || preflightBusy) return;
+    const button = document.getElementById('preflight-config-btn');
+    const restart = document.getElementById('restart-service-btn');
+    const oldHtml = button?.innerHTML;
+    const restartDisabled = restart?.disabled;
+    preflightBusy = true;
+    if (button) { button.disabled = true; button.textContent = 'Тест DNS…'; button.setAttribute('aria-busy', 'true'); }
+    if (restart) restart.disabled = true;
+    try {
+        const content = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
+        const error = await validateConfigLogical(content);
+        if (error) { alert(error); return; }
+        if (!await window.reviewValidationReport(await validateConfigOnServer(content))) return;
+        const reply = await apiCall('preflight_config', null, content, true);
+        await window.reviewValidationReport(window.parseValidationReport(reply), true);
+    } catch (error) { alert('Тест DNS не подтверждён: ' + error.message); }
+    finally {
+        preflightBusy = false;
+        if (button) { button.disabled = false; button.innerHTML = oldHtml; button.removeAttribute('aria-busy'); }
+        if (restart) restart.disabled = restartDisabled;
     }
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line || line.startsWith('#')) continue;
-        const cmd = line.split(/\s+/)[0];
-
-        if (cmd === 'nameserver') {
-            const nsMatch = line.match(/\/domain-set:[^\/]+\/([^\s\/]+)/);
-            if (nsMatch) {
-                const g = nsMatch[1];
-                if (!definedGroups.includes(g)) {
-                    return `Отмена сохранения!\nМаршрут ссылается на группу "${g}", но такая группа не создана!\nСначала добавьте её в блоке "Групповые DNS записи".`;
-                }
-            }
-        }
-
-        if (cmd === 'domain-set') {
-            const fileMatch = line.match(/-file\s+([^\s]+)/);
-            if (fileMatch) {
-                usedLists.push(fileMatch[1].replace(/['"]/g, ''));
-            }
-        }
-    }
-
-    if (usedLists.length > 0) {
-        const listsRaw = await apiCall('get_lists');
-        const availableLists = listsRaw.split('\n').map(l => l.trim()).filter(l => l);
-        
-        for (let file of usedLists) {
-            const fileName = file.split('/').pop();
-            if (fileName.endsWith('.list') && !availableLists.includes(fileName)) {
-                return `Отмена сохранения!\nМаршрут требует лист "${fileName}", но он не существует!\nПерейдите во вкладку "Списки" и сначала создайте его.`;
-            }
-        }
-    }
-
-    return null; 
 }
 
 // === ОСНОВНОЕ СОХРАНЕНИЕ ===
+async function readConfigSnapshot() {
+    const reply = await apiCall('get_config_snapshot', null, null, true);
+    if (typeof reply !== 'string' || !/^REVISION [0-9a-f]{64}\n/.test(reply)) throw new Error('Не удалось прочитать версию конфигурации. Обновите WebUI.');
+    return {revision:reply.slice(9, 73), content:reply.slice(74)};
+}
+
 async function globalSave() {
     let contentToSave = '';
     
     if (activeTab === 'settings') {
-        contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
+        try {
+            contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
+        } catch (error) {
+            alert(error.message);
+            return false;
+        }
         
         const error = await validateConfigLogical(contentToSave);
         if (error) {
@@ -531,23 +514,27 @@ async function globalSave() {
             return false;
         }
 
-        // Conservative offline checks only; this is not SmartDNS's native parser.
-        if (typeof window.validateSmartDnsConfig === 'function') {
-            const syntax = window.validateSmartDnsConfig(contentToSave);
-            if (syntax.errors.length) {
-                alert('Предварительная проверка конфигурации не пройдена:\n\n' + syntax.errors.join('\n\n') +
-                    '\n\nЭто статическая проверка WebUI, а не проверка самим SmartDNS.');
-                return false;
+        // The router validates this exact text; the same check is repeated on save.
+        try {
+            if (!configRevision || configSnapshotMode !== isTestMode) throw new Error('Заново загрузите конфигурацию выбранного режима перед сохранением.');
+            const report = await validateConfigOnServer(contentToSave);
+            if (!await window.reviewValidationReport(report)) return false;
+            const snapshot = await readConfigSnapshot();
+            if (snapshot.revision !== configRevision) throw new Error('Файл изменён другим сеансом. Ваши правки остались в редакторе. Скопируйте их из Raw и заново загрузите конфигурацию.');
+            if (!await window.reviewConfigChanges(snapshot.content, contentToSave)) return false;
+            const reply = await apiCall('save_config', null, contentToSave, true, configRevision);
+            if (typeof reply !== 'string' || !/^OK\nREVISION [0-9a-f]{64}(?:\n|$)/.test(reply)) {
+                if (typeof reply === 'string' && reply.startsWith('VALIDATION_FAILED\n')) {
+                    await window.reviewValidationReport(window.parseValidationReport(reply.slice(18)), true);
+                    return false;
+                }
+                if (typeof reply === 'string' && reply.startsWith('CONFLICT:')) throw new Error('Файл изменился во время просмотра. Запись отменена; правки сохранены в редакторе.');
+                if (typeof reply === 'string' && reply.startsWith('BUSY:')) throw new Error('Другой сеанс сейчас сохраняет файл. Повторите позже.');
+                throw new Error('Сохранение не подтверждено. Проверьте соединение и возможность создания резервной копии.');
             }
-            if (syntax.warnings.length && !confirm('Предварительная проверка обнаружила предупреждения:\n\n' +
-                syntax.warnings.join('\n\n') + '\n\nСохранить конфигурацию всё равно?')) {
-                return false;
-            }
-        }
-        
-        const saved = await apiCall('save_config', null, contentToSave);
-        if (!saved) {
-            alert('Не удалось сохранить конфигурацию. Исходное состояние не изменено.');
+            configRevision = reply.slice(12, 76);
+        } catch (error) {
+            alert(error.message);
             return false;
         }
         originalConfigContent = contentToSave; 
@@ -567,7 +554,12 @@ async function globalSave() {
 }
 
 async function loadConfig() {
-    const content = await apiCall('get_config');
+    let snapshot;
+    try { snapshot = await readConfigSnapshot(); }
+    catch (error) { alert(error.message); return; }
+    const content = snapshot.content;
+    configRevision = snapshot.revision;
+    configSnapshotMode = isTestMode;
     document.getElementById('config-sections').innerHTML = parseConfigToSections(content);
     organizeConfigSections();
     if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
@@ -588,46 +580,55 @@ async function loadConfig() {
     }, 10);
 }
 
+let safeApplyBusy = false;
 async function restartService() {
+    if (safeApplyBusy || preflightBusy || activeTab !== 'settings') return;
+    safeApplyBusy = true;
     const btn = document.getElementById('restart-service-btn');
-    if (btn && btn.disabled) return;
-
-    const saveBtn = document.getElementById('global-save-btn');
-    if (saveBtn && !saveBtn.disabled) {
-        const saved = await globalSave();
-        if (!saved) return;
-    }
-
-    const originalHtml = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Перезапуск...';
-        btn.setAttribute('aria-busy', 'true');
-    }
-
+    const oldHtml = btn?.innerHTML;
+    let operationObserved = false;
+    if (btn) { btn.disabled=true; btn.textContent='Применение…'; }
     try {
-        const result = await apiCall('restart_service');
-        if (result !== 'OK') {
-            const details = typeof result === 'string' && result
-                ? '\n\n' + result.slice(0, 500)
-                : '\n\nНе удалось получить ответ от WebUI.';
-            alert('Перезапуск SmartDNS НЕ подтверждён.' + details);
+        if (isTestMode) throw new Error('Применение отключено в тестовом режиме UI. Рабочий DNS не изменён.');
+        let pending = localStorage.getItem('smartdns-apply-transaction');
+        if (!pending && !isTestMode) {
+            const active = await apiCall('get_active_apply',null,null,true);
+            if (active.trim() !== 'NONE') {
+                const found = /^TRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(active);
+                if (!found) throw new Error('Не удалось определить текущую операцию применения.');
+                pending = found[1];localStorage.setItem('smartdns-apply-transaction',pending);
+            }
+        }
+        if (pending) {
+            operationObserved = true;
+            await window.monitorSafeApply(pending, (action,id)=>apiCall(action,id,null,true));
             return;
         }
-        if (isTestMode) {
-            alert('Тестовый режим: запрос проверен, реальный SmartDNS не перезапускался.');
-        } else {
-            alert('SmartDNS успешно перезапущен. Команда завершилась без ошибки, а процесс службы обнаружен после перезапуска.');
-        }
-    } catch (e) {
-        console.error('SmartDNS restart failed:', e);
-        alert('Не удалось проверить результат перезапуска SmartDNS. Обнови страницу и проверь журнал службы.');
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.removeAttribute('aria-busy');
-            btn.innerHTML = originalHtml;
-        }
+        if (!configRevision || configSnapshotMode !== isTestMode) throw new Error('Заново загрузите конфигурацию перед применением.');
+        const content = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
+        const error = await validateConfigLogical(content);
+        if (error) throw new Error(error);
+        if (!await window.reviewValidationReport(await validateConfigOnServer(content))) return;
+        const snapshot = await readConfigSnapshot();
+        if (snapshot.revision !== configRevision) throw new Error('Файл изменён другим сеансом. Ваши правки остались в редакторе.');
+        if (!await window.reviewConfigChanges(snapshot.content, content, {apply:true})) return;
+        if (!confirm('Применить конфигурацию с перезапуском DNS?\n\nОткат вернёт текущий файл на диске. Он может отличаться от настроек запущенного процесса, если вы ранее сохранили файл без рестарта. Старый файл и кандидат сначала пройдут отдельный тест.\n\nНа проверку и подтверждение отведено 180 секунд с начала операции. Без подтверждения начнётся автоматический откат.')) return;
+        const reply = await apiCall('apply_config', null, content, true, configRevision);
+        const match = /^OK\nTRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(reply);
+        if (!match) throw new Error(String(reply).slice(0,500));
+        operationObserved = true;
+        localStorage.setItem('smartdns-apply-transaction',match[1]);
+        await window.monitorSafeApply(match[1],(action,id)=>apiCall(action,id,null,true));
+    } catch(error) { alert('Применение не подтверждено: '+error.message); }
+    finally {
+        safeApplyBusy=false;
+        if(btn) { btn.disabled=false;btn.innerHTML=oldHtml; }
+        // Refresh the saved baseline without overwriting edits made while polling.
+        if (operationObserved) try {
+            const snapshot=await readConfigSnapshot();
+            configRevision=snapshot.revision;originalConfigContent=snapshot.content;
+            updateSaveButtonState();
+        } catch (_) { /* Keep the editor intact if the connection was lost. */ }
     }
 }
 
