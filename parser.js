@@ -144,8 +144,8 @@ const UI = {
     card: (title, id, linesArr, notice = '') => {
         const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
         const body = dnsSection
-            ? '<textarea data-dns-records="' + UI.escape(JSON.stringify(linesArr)) + '" id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.map(dnsDisplay).join('\n')) + '</textarea>'
-            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty()">' + UI.escape(linesArr.join('\n')) + '</textarea>';
+            ? '<textarea data-dns-records="' + UI.escape(JSON.stringify(linesArr)) + '" id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty(event)" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.map(dnsDisplay).join('\n')) + '</textarea>'
+            : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty(event)">' + UI.escape(linesArr.join('\n')) + '</textarea>';
         return '<div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>' + title + '</span></div><div class="card-body p-0">' + (notice ? '<div class="p-2 text-muted small border-bottom">' + notice + '</div>' : '') + body + '</div></div>';
     },
     logCard: (level) => `
@@ -154,7 +154,7 @@ const UI = {
             <div class="card-body p-3">
                 <div class="d-flex align-items-center">
                     <label class="form-label text-light small fw-bold mb-0 me-3">Уровень логов (log-level):</label>
-                    <span class="log-level-select-wrap"><select id="sec-logging-select" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty()">
+                    <span class="log-level-select-wrap"><select id="sec-logging-select" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty(event)">
                         ${['fatal','error','warn','notice','info','debug'].map(l => `<option value="${l}" ${l===level?'selected':''}>${l}</option>`).join('')}
                     </select></span>
                 </div>
@@ -167,15 +167,15 @@ const UI = {
                 <input type="checkbox" class="addr-enabled" ${enabled ? 'checked' : ''} onchange="toggleAddressRecord(this)" aria-label="Включить локальный адрес">
             </label>
             <i class="bi bi-grip-vertical text-secondary me-2 drag-handle" style="cursor: grab; font-size: 1.2rem;"></i>
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty()">
-            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP через запятую" value="${UI.escape(ip)}" oninput="markConfigDirty()">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-domain me-2" placeholder="Домен" value="${UI.escape(domain)}" oninput="this.value=this.value.replace(/,/g, ''); markConfigDirty(event)">
+            <input type="text" class="form-control form-control-sm bg-secondary text-light border-secondary addr-ip me-2 w-50" placeholder="IP через запятую" value="${UI.escape(ip)}" oninput="markConfigDirty(event)">
             <button class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove(); markConfigDirty();" title="Удалить"><i class="bi bi-trash"></i></button>
         </div>`,
 
     routeFileRow: (path) => `
         <div class="route-file-row d-flex align-items-center gap-2">
             <i class="bi bi-file-earmark-text text-secondary"></i>
-            <select class="form-select form-select-sm route-file-select" data-current-path="${UI.escape(path)}" onchange="this.dataset.currentPath=this.value; markConfigDirty()"><option value="" disabled ${path ? '' : 'selected'}>Выберите список…</option>${path ? '<option value="' + UI.escape(path) + '" selected>' + UI.escape(path) + '</option>' : ''}</select>
+            <select class="form-select form-select-sm route-file-select" data-current-path="${UI.escape(path)}" onchange="this.dataset.currentPath=this.value; markConfigDirty(event)"><option value="" disabled ${path ? '' : 'selected'}>Выберите список…</option>${path ? '<option value="' + UI.escape(path) + '" selected>' + UI.escape(path) + '</option>' : ''}</select>
             <button type="button" class="icon-action danger" onclick="this.closest('.route-file-row').remove(); markConfigDirty();" title="Убрать список"><i class="bi bi-trash3"></i></button>
         </div>`,
     routeCard: (name, group, files) => `
@@ -184,7 +184,7 @@ const UI = {
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <div class="editable-name route-editable-name flex-grow-1">
                     <span class="route-name-display fw-semibold">${UI.escape(name || 'Новый маршрут')}</span>
-                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty()" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
+                    <input type="text" class="form-control form-control-sm route-name d-none" value="${UI.escape(name)}" placeholder="Имя набора" oninput="updateInlineName(this); markConfigDirty(event)" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
@@ -196,7 +196,7 @@ const UI = {
                 <button class="btn btn-sm btn-outline-primary" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить список</button>
                 <div class="d-flex align-items-center">
                     <label class="small text-muted me-2">DNS-группа</label>
-                    <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty()"><option value="${UI.escape(group)}" selected>${UI.escape(group)}</option></select>
+                    <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty(event)"><option value="${UI.escape(group)}" selected>${UI.escape(group)}</option></select>
                 </div>
             </div>
         </div>`,
@@ -208,13 +208,13 @@ const UI = {
                 <button type="button" class="group-collapse-toggle btn btn-sm btn-link text-reset p-1" onclick="toggleDnsGroup(this)" aria-expanded="true" title="Свернуть DNS-группу" aria-label="Свернуть DNS-группу"><i class="bi bi-chevron-down"></i></button>
                 <div class="editable-name group-editable-name flex-grow-1">
                     <span class="group-name-display fw-semibold">${UI.escape(name || 'Новая DNS-группа')}</span>
-                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty()" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
+                    <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty(event)" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
             <div class="group-body">
-                <textarea data-dns-records="${UI.escape(JSON.stringify((content || '').split(/\r?\n/).filter(Boolean)))}" class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\r?\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty()" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape((content || '').split(/\r?\n/).map(dnsDisplay).join('\n'))}</textarea>
+                <textarea data-dns-records="${UI.escape(JSON.stringify((content || '').split(/\r?\n/).filter(Boolean)))}" class="form-control code-font dns-multiline-editor group-dns-list border-0 rounded-0 p-3" rows="${Math.max(5, Math.min(12, (content || '').split(/\r?\n/).length + 2))}" spellcheck="false" oninput="markConfigDirty(event)" placeholder="Один DNS-сервер на строку; строки с # отключены">${UI.escape((content || '').split(/\r?\n/).map(dnsDisplay).join('\n'))}</textarea>
             </div>
         </div>`,
     coreCard: (data, rawLines) => `
@@ -225,24 +225,24 @@ const UI = {
                 <div class="dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''} mb-3"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="useSimplifiedDnsBind()">Вернуться к одному полю порта</button><div class="small text-muted mt-2" id="dns-bind-mode-hint" role="status">Упрощённый режим доступен для одной совпадающей пары UDP/TCP без дополнительных аргументов.</div></div>
                 <div class="row mb-3 align-items-center dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Адрес и порт (bind):</label></div>
-                    <div class="col-sm-6"><input type="text" id="core-bind" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.bind)}" oninput="markConfigDirty()"></div>
+                    <div class="col-sm-6"><input type="text" id="core-bind" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.bind)}" oninput="markConfigDirty(event)"></div>
                 </div>
                 <div class="row mb-3 align-items-center">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Размер кэша:</label></div>
-                    <div class="col-sm-6"><input type="number" id="core-cache-size" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.cache_size)}" oninput="markConfigDirty()"></div>
+                    <div class="col-sm-6"><input type="number" id="core-cache-size" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.cache_size)}" oninput="markConfigDirty(event)"></div>
                 </div>
                 <div class="row mb-3 align-items-center">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Упреждающее обновление:</label></div>
-                    <div class="col-sm-6"><div class="form-check form-switch m-0"><input class="form-check-input shadow-none" type="checkbox" id="core-prefetch" ${data.prefetch_domain === 'yes' ? 'checked' : ''} onchange="markConfigDirty()"></div></div>
+                    <div class="col-sm-6"><div class="form-check form-switch m-0"><input class="form-check-input shadow-none" type="checkbox" id="core-prefetch" ${data.prefetch_domain === 'yes' ? 'checked' : ''} onchange="markConfigDirty(event)"></div></div>
                 </div>
                 <div class="row mb-3 align-items-center">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Отдавать просроченный кэш:</label></div>
-                    <div class="col-sm-6"><div class="form-check form-switch m-0"><input class="form-check-input shadow-none" type="checkbox" id="core-serve-expired" ${data.serve_expired === 'yes' ? 'checked' : ''} onchange="markConfigDirty()"></div></div>
+                    <div class="col-sm-6"><div class="form-check form-switch m-0"><input class="form-check-input shadow-none" type="checkbox" id="core-serve-expired" ${data.serve_expired === 'yes' ? 'checked' : ''} onchange="markConfigDirty(event)"></div></div>
                 </div>
                 <div class="row mb-3 align-items-center">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Выбор лучшего IP:</label></div>
                     <div class="col-sm-6">
-                        <select id="core-response-mode" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty()">
+                        <select id="core-response-mode" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty(event)">
                             <option value="fastest-response" ${data.response_mode === 'fastest-response' ? 'selected' : ''}>fastest-response</option>
                             <option value="first-ping" ${data.response_mode === 'first-ping' ? 'selected' : ''}>first-ping</option>
                             <option value="fastest-ip" ${data.response_mode === 'fastest-ip' ? 'selected' : ''}>fastest-ip</option>
@@ -253,22 +253,22 @@ const UI = {
                 <div class="row mb-2 align-items-start">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Проверка скорости:</label></div>
                     <div class="col-sm-6">
-                        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="speed-ping" ${data.speed_check_mode.includes('ping') ? 'checked' : ''} onchange="markConfigDirty()"><label class="form-check-label small text-light">ICMP Ping</label></div>
-                        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="speed-tcp443" ${data.speed_check_mode.includes('tcp:443') ? 'checked' : ''} onchange="markConfigDirty()"><label class="form-check-label small text-light">TCP 443</label></div>
-                        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="speed-tcp80" ${data.speed_check_mode.includes('tcp:80') ? 'checked' : ''} onchange="markConfigDirty()"><label class="form-check-label small text-light">TCP 80</label></div>
+                        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="speed-ping" ${data.speed_check_mode.includes('ping') ? 'checked' : ''} onchange="markConfigDirty(event)"><label class="form-check-label small text-light">ICMP Ping</label></div>
+                        <div class="form-check mb-1"><input class="form-check-input" type="checkbox" id="speed-tcp443" ${data.speed_check_mode.includes('tcp:443') ? 'checked' : ''} onchange="markConfigDirty(event)"><label class="form-check-label small text-light">TCP 443</label></div>
+                        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="speed-tcp80" ${data.speed_check_mode.includes('tcp:80') ? 'checked' : ''} onchange="markConfigDirty(event)"><label class="form-check-label small text-light">TCP 80</label></div>
                     </div>
                 </div>
                 ${UI.coreExtraFields(data)}
                 <label class="form-label small" for="sec-core-others">Дополнительные параметры Core ${UI.help('Дополнительные bind, отключённые строки и параметры без отдельного переключателя. Они сохраняются как написаны. Одна полная директива на строку; # отключает строку.')}</label>
-                <textarea id="sec-core-others" class="form-control code-font" rows="3" oninput="markConfigDirty()">${UI.escape(rawLines.join('\n'))}</textarea>
+                <textarea id="sec-core-others" class="form-control code-font" rows="3" oninput="markConfigDirty(event)">${UI.escape(rawLines.join('\n'))}</textarea>
                 <input type="hidden" id="core-speed-original" value="${UI.escape(data.speed_check_mode)}" data-selection="${['tcp:443','tcp:80','ping'].filter(v => data.speed_check_mode.split(',').includes(v)).join(',')}">
             </div>
         </div>`,
     coreExtraFields: data => `
-        <div class="row mb-3 dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}"><div class="col-sm-6"><label class="form-label small" for="core-bind-tcp">Адреса TCP DNS (bind-tcp)</label></div><div class="col-sm-6"><textarea id="core-bind-tcp" class="form-control form-control-sm code-font" rows="2" placeholder="Не задано" oninput="markConfigDirty()">${UI.escape(data.bind_tcp.join('\n'))}</textarea></div></div>
-        ${[['force-aaaa-soa','Блокировать IPv6-ответы (force-AAAA-SOA)',data.force_aaaa_soa],['cache-persist','Сохранять кэш на диск',data.cache_persist]].map(([id,label,value]) => `<div class="row mb-3"><div class="col-sm-6"><label class="form-label small" for="core-${id}">${label}</label></div><div class="col-sm-6"><select id="core-${id}" class="form-select form-select-sm" onchange="markConfigDirty()">${[['','Не задано (наследовать)'],['yes','Да'],['no','Нет'],...(['','yes','no'].includes(value)?[]:[[value,value+' (проверьте значение)']])].map(([v,text])=>`<option value="${UI.escape(v)}" ${v===value?'selected':''}>${UI.escape(text)}</option>`).join('')}</select></div></div>`).join('')}`
+        <div class="row mb-3 dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}"><div class="col-sm-6"><label class="form-label small" for="core-bind-tcp">Адреса TCP DNS (bind-tcp)</label></div><div class="col-sm-6"><textarea id="core-bind-tcp" class="form-control form-control-sm code-font" rows="2" placeholder="Не задано" oninput="markConfigDirty(event)">${UI.escape(data.bind_tcp.join('\n'))}</textarea></div></div>
+        ${[['force-aaaa-soa','Блокировать IPv6-ответы (force-AAAA-SOA)',data.force_aaaa_soa],['cache-persist','Сохранять кэш на диск',data.cache_persist]].map(([id,label,value]) => `<div class="row mb-3"><div class="col-sm-6"><label class="form-label small" for="core-${id}">${label}</label></div><div class="col-sm-6"><select id="core-${id}" class="form-select form-select-sm" onchange="markConfigDirty(event)">${[['','Не задано (наследовать)'],['yes','Да'],['no','Нет'],...(['','yes','no'].includes(value)?[]:[[value,value+' (проверьте значение)']])].map(([v,text])=>`<option value="${UI.escape(v)}" ${v===value?'selected':''}>${UI.escape(text)}</option>`).join('')}</select></div></div>`).join('')}`
 };
-UI.bindPortField = data => `<div class="dns-bind-simple ${data.show_simple_bind?'':'d-none'}"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty()"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div></div></div><button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="useAdvancedDnsBind()">Расширенные настройки адресов</button></div>`;
+UI.bindPortField = data => `<div class="dns-bind-simple ${data.show_simple_bind?'':'d-none'}"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty(event)"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div></div></div><button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="useAdvancedDnsBind()">Расширенные настройки адресов</button></div>`;
 
 function useAdvancedDnsBind() {
     const port = document.getElementById('core-dns-port');

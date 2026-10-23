@@ -39,6 +39,9 @@ function harness(accepted, readError=false) {
         validateConfigLogical:async()=>null, window:{reviewValidationReport:async()=>true,reviewConfigChanges:async(before,after)=>{assert.equal(before,'disk');assert.equal(after,'new');return accepted;}},
         apiCall:async(action)=>{calls.push(action);if(readError)throw Error('offline');return 'OK\nREVISION '+'b'.repeat(64)+'\n';},
         alert:()=>{},originalConfigContent:'old',updateSaveButtonState:()=>{}};
+    context.changes=new (require('../change-center.js').ChangeController)();
+    context.changes.open('config:live',{text:'old'},{revision:'a'.repeat(64)});
+    context.currentDocumentId=()=> 'config:live';context.captureCurrentDraft=()=>({text:'new'});
     vm.createContext(context);vm.runInContext(saveFunction,context);
     return {context,calls};
 }
@@ -47,7 +50,7 @@ test('cancel and read failure do not write config; approval writes reviewed cont
         const h=harness(accepted,error);
         assert.equal(await h.context.globalSave(),accepted&&!error);
         assert.deepEqual(h.calls,accepted&&!error?['get_config_snapshot','save_config']:['get_config_snapshot']);
-        assert.equal(h.context.originalConfigContent,accepted&&!error?'new':'old');
+        assert.equal(h.context.changes.get().saved.text,accepted&&!error?'new':'old');
     }
 });
 
@@ -100,11 +103,11 @@ test('stale snapshot and server-side conflict preserve edits and loaded revision
     const race=harness(true);
     race.context.apiCall=async()=> 'CONFLICT: changed';
     assert.equal(await race.context.globalSave(),false);
-    assert.equal(race.context.configRevision,'a'.repeat(64));
-    assert.equal(race.context.originalConfigContent,'old');
+    assert.equal(race.context.changes.get().revision,'a'.repeat(64));
+    assert.equal(race.context.changes.get().saved.text,'old');
     const ok=harness(true);
     assert.equal(await ok.context.globalSave(),true);
-    assert.equal(ok.context.configRevision,'b'.repeat(64));
+    assert.equal(ok.context.changes.get().revision,'b'.repeat(64));
 });
 test('snapshot parser preserves file bytes and rejects an error response',async()=>{
     const helper=app.slice(app.indexOf('async function readConfigSnapshot()'),app.indexOf('async function globalSave()'));
@@ -138,4 +141,10 @@ test('validation dialog blocks errors, allows warning acknowledgement and escape
         w.document.querySelector('dialog .btn-primary').click();assert.equal(await warning,true);
         assert.equal(await w.reviewValidationReport({profile:'46.1',errors:[],warnings:[],info:['disabled']}),true);
     }finally{w.close()}
+});
+test('saving an approved snapshot does not erase edits typed while the request is pending',async()=>{
+ const h=harness(true);let resume;h.context.apiCall=()=>new Promise(resolve=>{resume=resolve});const pending=h.context.globalSave();await new Promise(setImmediate);h.context.changes.change('config:live',{text:'later'});resume('OK\nREVISION '+'b'.repeat(64)+'\n');assert.equal(await pending,true);assert.equal(h.context.changes.get().saved.text,'new');assert.equal(h.context.changes.get().draft.text,'later');assert(h.context.changes.dirty());assert.equal(h.context.changes.operation,null);
+});
+test('preview diff offers only Close and cannot write a file',async()=>{
+ const dom=new JSDOM('<body/>',{runScripts:'outside-only'});const w=dom.window;w.HTMLDialogElement.prototype.showModal=function(){};w.HTMLDialogElement.prototype.close=function(){};w.eval(fs.readFileSync(require.resolve('../config-review.js'),'utf8'));try{const done=w.reviewConfigChanges('old','new',{preview:true,title:'a.list'});assert.equal(w.document.querySelectorAll('dialog button').length,1);assert.equal(w.document.querySelector('button').textContent,'Закрыть');w.document.querySelector('button').click();assert.equal(await done,false);}finally{w.close()}
 });

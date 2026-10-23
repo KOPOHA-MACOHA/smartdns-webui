@@ -126,6 +126,11 @@ case "$REQUEST_PATH" in
         printf "Content-Type: application/javascript; charset=utf-8\r\nCache-Control: no-store\r\n\r\n"
         cat "$BASE_DIR/config-review.js"
         ;;
+    /change-center.js)
+        printf "Content-Type: application/javascript; charset=utf-8\r\nCache-Control: no-store\r\n\r\n"
+        cat "$BASE_DIR/change-center.js"
+        exit 0
+        ;;
     /app.js)
         printf "Content-Type: application/javascript; charset=utf-8\r\nCache-Control: no-store\r\n\r\n"
         cat "$BASE_DIR/app.js"

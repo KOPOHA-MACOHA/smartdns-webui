@@ -329,11 +329,11 @@ test('simple mode never discards mismatched listeners or extra bind arguments',(
     } finally {ui.close()}
 });
 
-test('DNS organization action belongs to Raw tools rather than mode navigation',()=>{
+test('DNS organization action belongs to the central change panel',()=>{
     const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'..','template.html'),'utf8'));
     try {
         const action=dom.window.document.querySelector('[onclick="organizeDnsBlocks()"]');
-        assert.equal(action.closest('#settings-raw-view').id,'settings-raw-view');
+        assert.equal(action.closest('#change-center').id,'change-center');
         assert(!dom.window.document.getElementById('btn-mode-raw').parentElement.contains(action));
     } finally {dom.window.close()}
 });
