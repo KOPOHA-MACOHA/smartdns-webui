@@ -88,7 +88,7 @@ test('review marks additions/deletions and collapses long unchanged context',asy
         assert(dialog.querySelector('.config-diff-gap'));
         assert.equal(dialog.querySelectorAll('.config-diff-line').length,7);
         dialog.querySelector('.btn-secondary').click();assert.equal(await promise,false);
-        const css=fs.readFileSync(require.resolve('../template.html'),'utf8');
+        const css=fs.readFileSync(require.resolve('../ui.css'),'utf8');
         assert(css.includes('.config-review { background: var(--surface); color: var(--text);'));
         assert(css.includes(':root[data-theme="dark"] .config-diff-remove'));
         assert(css.includes(':root[data-theme="dark"] .config-diff-add'));
