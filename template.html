@@ -36,6 +36,8 @@
         .config-diff-gap { color: var(--muted); background: var(--surface-muted); }
         :root[data-theme="dark"] .config-diff-remove { background: #48252d; color: #ffd0ce; }
         :root[data-theme="dark"] .config-diff-add { background: #203e30; color: #aff5b4; }
+        #change-center { max-width:1240px; margin-inline:auto; }
+        #change-center summary { cursor:pointer; }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--page); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; }
         .navbar { min-height: 64px; padding: 0 22px; background: var(--surface) !important; border-color: var(--line) !important; box-shadow: var(--shadow); }
@@ -156,8 +158,6 @@
             .sidebar .nav { flex-direction: row !important; gap: 4px; }
             .nav-pills .nav-link { flex: 1; justify-content: center; margin: 0; padding: 10px 5px; font-size: 14px; min-height: 42px; }
             .col-md-10 { padding: 12px !important; min-width: 0; }
-            #global-save-btn { font-size: 0; min-width: 42px; min-height: 42px; }
-            #global-save-btn .bi { font-size: 1.1rem; margin: 0 !important; }
             .btn, .form-control, .form-select { min-height: 40px; font-size: 15px; }
             .btn-sm { min-height: 36px; }
             .route-group { width: min(230px, 58vw); }
@@ -225,7 +225,6 @@
             .navbar-brand { font-size:18px; }
             .navbar > .container-fluid > .d-flex { gap:6px !important; flex-wrap:wrap; justify-content:flex-end; }
             #btn-update { margin:0 !important; }
-            #global-save-btn { min-width:42px; min-height:42px; padding:8px 10px; }
             .container-fluid { padding-left:0; padding-right:0; }
             .container-fluid > .row { display:block; margin:0; }
             .sidebar { width:100%; min-height:0; padding:8px !important; border-right:0 !important; border-bottom:1px solid var(--line); }
@@ -361,7 +360,6 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
             .app-topbar #btn-update{font-size:0}
             .app-topbar #btn-update .bi{font-size:14px}
             .app-topbar #current-version-text{display:none}
-.app-topbar #global-save-btn{min-width:38px;min-height:38px;padding:7px;font-size:0}.app-topbar #global-save-btn .bi{margin:0!important;font-size:16px}
 .app-topbar #theme-toggle,.app-topbar .btn-warning{min-width:36px;min-height:36px;padding:6px}
 .app-topbar .btn-warning{font-size:0}.app-topbar .btn-warning .bi{font-size:16px;margin:0!important}
 .app-layout{display:block!important;min-height:auto}
@@ -668,14 +666,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
                 <label class="form-check-label text-light small" for="test-mode-toggle">Тест-режим</label>
             </div>
             <button id="theme-toggle" class="btn btn-outline-secondary btn-sm me-1" type="button" onclick="toggleTheme()" title="Переключить тему" aria-label="Переключить тему"><i class="bi bi-moon-stars"></i></button>
-            <button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="globalSave()" disabled>
-                <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
-            </button>
-            <button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button>
-            <button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button>
-            <button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
-                <i class="bi bi-arrow-repeat me-1"></i> Применить
-            </button>
+
         </div>
     </div>
 </nav>
@@ -692,11 +683,40 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
             <div class="px-3 mt-4 text-muted" style="font-size: 0.75rem;">
                 <b>Хоткеи:</b><br>
                 Ctrl+S - Сохранить<br>
+                Ctrl+Z / Ctrl+Y - Отмена / повтор<br>
                 Ctrl+/ - Коммент (#)
             </div>
         </aside>
 
         <main class="col-md-10 app-main p-4">
+<section id="change-center" class="card mb-3" aria-label="Изменения">
+ <div class="card-header d-flex flex-wrap gap-2"><strong>Изменения</strong><span id="change-count" class="small text-muted ms-auto"></span></div>
+ <div class="card-body">
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-2"><select id="change-document" class="form-select" style="width:auto;max-width:100%" aria-label="Открытый файл" onchange="openChangeDocument(this.value)"></select><span id="change-status" role="status" aria-live="polite"></span></div>
+  <div class="d-flex flex-wrap gap-2">
+   <button id="undo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="undoEditorChange()" disabled>Отменить (Ctrl+Z)</button>
+   <button id="redo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="redoEditorChange()" disabled>Повторить</button>
+   <button id="diff-change-btn" class="btn btn-sm btn-outline-secondary" onclick="previewEditorChanges()" disabled>Посмотреть diff</button>
+
+
+               <button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="globalSave()" disabled>
+                <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
+            </button>
+
+
+            <button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
+                <i class="bi bi-arrow-repeat me-1"></i> Применить
+            </button>
+
+  </div>
+  <details class="mt-2"><summary class="small text-muted">Проверка и другие действия</summary><div class="d-flex flex-wrap gap-2 mt-2"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled>Перечитать файл</button>
+<button id="discard-change-btn" class="btn btn-sm btn-outline-secondary" onclick="discardEditorChanges()" disabled>Сбросить правки</button>
+<button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button>
+<button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button>
+<button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled>Разложить DNS по блокам</button></div></details>
+  <div id="change-detail" class="small text-muted mt-2"></div>
+ </div>
+</section>
             <div id="tab-settings" class="tab-content active">
                 <div class="d-flex mb-3 gap-2">
                     <button id="btn-mode-ui" class="btn btn-sm btn-primary" onclick="switchSettingsMode('ui')">Визуальный режим</button>
@@ -707,10 +727,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
                     <div id="config-sections"></div>
                 </div>
                 <div id="settings-raw-view" style="display:none;">
-                    <div class="d-flex justify-content-end mb-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" title="Перенести DNS-строки под соответствующие заголовки; изменения останутся в редакторе до сохранения">Разложить DNS по блокам</button>
-                    </div>
-                    <textarea id="raw-config-text" class="form-control code-font" rows="25" oninput="markConfigDirty()"></textarea>
+                    <textarea id="raw-config-text" class="form-control code-font" rows="25" oninput="markConfigDirty(event)"></textarea>
                 </div>
             </div>
 
@@ -728,7 +745,7 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
                             <div class="card-header border-secondary d-flex justify-content-between align-items-center">
                                 <span id="current-list-title">Выберите список</span>
                             </div>
-                            <textarea id="list-content" class="form-control code-font border-0 rounded-0" rows="20" disabled oninput="markListDirty()"></textarea>
+                            <textarea id="list-content" class="form-control code-font border-0 rounded-0" rows="20" disabled oninput="markListDirty(event)"></textarea>
                         </div>
                     </div>
                 </div>
@@ -799,11 +816,12 @@ body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=29"></script>
+<script src="parser.js?v=30"></script>
 <script src="validator.js?v=3"></script>
 <script src="version.js?v=1"></script>
-<script src="config-review.js?v=5"></script>
-<script src="safe-apply.js?v=2"></script>
-<script src="app.js?v=25"></script>
+<script src="config-review.js?v=6"></script>
+<script src="safe-apply.js?v=3"></script>
+<script src="change-center.js?v=1"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>

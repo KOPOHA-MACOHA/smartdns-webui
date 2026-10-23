@@ -11,166 +11,132 @@ function resetToHome() {
     switchSettingsMode('ui');
 }
 
-let originalConfigContent = ''; 
-let configRevision = '';
-let configSnapshotMode = false;
-let preflightBusy = false;
-let originalListContent = '';
-
-const settingsUndoHistory = {
-    undo: [],
-    redo: [],
-    lastSnapshot: null,
-    pending: false,
-    timer: null,
-    limit: 30
-};
-
-function captureSettingsSnapshot() {
-    const root = document.getElementById('config-sections');
-    if (!root) return null;
-    const controls = Array.from(root.querySelectorAll('input, textarea, select'));
-    const active = document.activeElement;
-    const activeIndex = controls.indexOf(active);
-    let selectionStart = null;
-    let selectionEnd = null;
+const changes = new window.ChangeController({onChange: renderChangeCenter});
+let renderingEditor = false;
+function configDocumentId() { return 'config:' + (isTestMode ? 'test' : 'live'); }
+function listDocumentId(name=activeList) { return 'list:'+(isTestMode?'test:':'live:')+name; }
+function currentDocumentId() { return activeTab==='settings'?configDocumentId():activeTab==='lists'&&activeList?listDocumentId():null; }
+function hasIncompleteConfig() {
+    return [...document.querySelectorAll('.address-item')].some(item=>!item.querySelector('.addr-domain').value.trim()||!item.querySelector('.addr-ip').value.trim()) ||
+        [...document.querySelectorAll('.group-item')].some(item=>!item.querySelector('.group-name-input').value.trim()) ||
+        [...document.querySelectorAll('.route-item')].some(item=>!item.querySelector('.route-name').value.trim() || !item.querySelector('.route-group').value || !item.querySelector('.route-file-select') || [...item.querySelectorAll('.route-file-select')].some(el=>!el.value));
+}
+function captureConfigDraft() {
+    if(currentSettingsMode==='raw') return {text:rawEditor?rawEditor.getValue():document.getElementById('raw-config-text').value};
+    const root=document.getElementById('config-sections');
+    const controls=[...root.querySelectorAll('input,textarea,select')];
+    const active=document.activeElement;
+    const ui={html:root.innerHTML,controls:controls.map(el=>({value:el.value,checked:'checked' in el?el.checked:null})),activeIndex:controls.indexOf(active)};
+    try {ui.start=active.selectionStart;ui.end=active.selectionEnd;}catch(_){}
+    let text=null,error='';try {text=gatherSectionsText();}catch(e){error=e.message;}
+    return {text,ui,incomplete:!!error||hasIncompleteConfig(),error,signature:JSON.stringify({html:ui.html,controls:ui.controls})};
+}
+function captureCurrentDraft() { return activeTab==='settings'?captureConfigDraft():{text:document.getElementById('list-content').value,deleted:!!changes.get(currentDocumentId())?.draft.deleted}; }
+function trackEditorChange(event) {
+    if(renderingEditor)return;
+    if(activeTab==='lists'&&document.getElementById('list-content').disabled)return;
+    const id=currentDocumentId();if(!changes.has(id))return;
+    const target=event?.target;
+    const typing=event?.type==='input' && (target?.tagName==='TEXTAREA'||target?.matches('input[type=text],input[type=number],input:not([type])'));
+    const controls=activeTab==='settings'?[...document.querySelectorAll('#config-sections input,#config-sections textarea')]:[];
+    const group=typing?'type:'+(target.id||controls.indexOf(target)):null;
+    changes.change(id,captureCurrentDraft(),{group});renderChangeCenter();
+}
+function markConfigDirty(event) { if(activeTab==='settings')trackEditorChange(event); }
+function markListDirty(event) { if(activeTab==='lists')trackEditorChange(event); }
+function renderConfigDraft(snapshot) {
+    renderingEditor=true;
     try {
-        if (active && typeof active.selectionStart === 'number') {
-            selectionStart = active.selectionStart;
-            selectionEnd = active.selectionEnd;
+        const root=document.getElementById('config-sections');
+        if(currentSettingsMode==='ui') {
+            if(snapshot.ui) {
+                root.innerHTML=snapshot.ui.html;
+                root.querySelectorAll('input,textarea,select').forEach((el,i)=>{
+                    const state=snapshot.ui.controls[i];if(!state)return;
+                    el.value=state.value;if(state.checked!==null)el.checked=state.checked;
+                });
+            } else root.innerHTML=parseConfigToSections(snapshot.text);
+            organizeConfigSections();refreshRouteGroupOptions();
+            if(typeof refreshRouteFileOptions==='function')refreshRouteFileOptions();
+            if(typeof applyDnsGroupCollapseState==='function')applyDnsGroupCollapseState();
+            root.querySelectorAll('textarea').forEach(autoResizeTextarea);initSortable();
+            const focus=snapshot.ui&&[...root.querySelectorAll('input,textarea,select')][snapshot.ui.activeIndex];
+            if(focus){focus.focus({preventScroll:true});try{focus.setSelectionRange(snapshot.ui.start,snapshot.ui.end);}catch(_){}}
+        } else {
+            document.getElementById('raw-config-text').value=snapshot.text;
+            if(rawEditor){rawEditor.setValue(snapshot.text);rawEditor.clearHistory();}
         }
-    } catch (_) {}
-
-    return {
-        html: root.innerHTML,
-        controls: controls.map(el => ({
-            value: el.value,
-            checked: 'checked' in el ? el.checked : null,
-            selectedIndex: el.tagName === 'SELECT' ? el.selectedIndex : null
-        })),
-        activeId: active && root.contains(active) ? active.id : '',
-        activeIndex,
-        selectionStart,
-        selectionEnd
-    };
+    } finally {renderingEditor=false;}
 }
-
-function settingsSnapshotsEqual(a, b) {
-    return !!a && !!b && a.html === b.html &&
-        JSON.stringify(a.controls) === JSON.stringify(b.controls);
-}
-
-function pushSettingsUndo(snapshot) {
-    if (!snapshot) return;
-    settingsUndoHistory.undo.push(snapshot);
-    if (settingsUndoHistory.undo.length > settingsUndoHistory.limit) {
-        settingsUndoHistory.undo.shift();
+function renderCurrentDraft(snapshot) {
+    if(!snapshot)return;
+    if(activeTab==='settings') {
+        if(snapshot.incomplete&&currentSettingsMode==='raw')setSettingsModeView('ui');
+        renderConfigDraft(snapshot);
+    } else if(activeTab==='lists') {
+        const el=document.getElementById('list-content');el.value=snapshot.text;el.disabled=!!snapshot.deleted;
     }
-    settingsUndoHistory.redo = [];
+    renderChangeCenter();
 }
-
-function resetSettingsUndoHistory() {
-    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
-    settingsUndoHistory.undo = [];
-    settingsUndoHistory.redo = [];
-    settingsUndoHistory.pending = false;
-    settingsUndoHistory.timer = null;
-    settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
+function undoEditorChange() {renderCurrentDraft(changes.undo());}
+function redoEditorChange() {renderCurrentDraft(changes.redo());}
+async function discardEditorChanges() {
+    if(!changes.dirty()||!confirm('Отменить несохранённые правки выбранного файла? Это действие можно отменить.'))return;
+    renderCurrentDraft(changes.discard());
 }
-
-function commitPendingSettingsEdit() {
-    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
-    settingsUndoHistory.timer = null;
-    if (settingsUndoHistory.pending) {
-        settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
-        settingsUndoHistory.pending = false;
+async function previewEditorChanges() {
+    const doc=changes.get();if(!doc)return;
+    if(doc.draft.incomplete){alert(doc.draft.error||'Заполните незавершённые карточки для просмотра diff.');return;}
+    const before=doc.saved.deleted?'':doc.saved.text,after=doc.draft.deleted?'':doc.draft.text;
+    if(before===after){alert(doc.draft.deleted?'Файл будет удалён при сохранении.':'При сохранении будет создан пустой файл.');return;}
+    await window.reviewConfigChanges(before,after,{preview:true,title:doc.label});
+}
+function renderChangeCenter() {
+    const panel=document.getElementById('change-center');if(!panel)return;
+    const id=currentDocumentId(),doc=changes.get(id),busy=!!changes.operation;
+    const config=activeTab==='settings'&&!!doc;
+    const disable=(id,value)=>{const el=document.getElementById(id);if(el)el.disabled=value;};
+    disable('undo-change-btn',busy||!doc?.undo.length);disable('redo-change-btn',busy||!doc?.redo.length);
+    disable('diff-change-btn',busy||!doc||!changes.dirty(id));disable('discard-change-btn',busy||!doc||!changes.dirty(id));
+    disable('global-save-btn',busy||!doc||!changes.dirty(id));
+    disable('validate-config-btn',busy||!config);disable('preflight-config-btn',busy||!config);
+    disable('restart-service-btn',busy||!config||isTestMode);
+    disable('organize-dns-btn',busy||!config);disable('reload-change-btn',busy||!doc);
+    const save=document.getElementById('global-save-btn');if(save)save.classList.toggle('btn-primary',!!doc&&changes.dirty(id));
+    const status=document.getElementById('change-status');
+    if(status)status.textContent=changes.operation?({save:'Сохранение файла…',validate:'Проверка…',preflight:'Тест DNS…',apply:'Применение DNS…',load:'Загрузка файла…'}[changes.operation]||changes.operation):!doc?'Выберите файл для редактирования':changes.dirty(id)?'Есть несохранённые правки':doc.kind==='config'&&doc.applied===doc.saved.text?'Сохранено и применено в этом сеансе':'Нет несохранённых правок';
+    const detail=document.getElementById('change-detail');
+    if(detail)detail.textContent=!doc?'Черновики открытых файлов остаются в этом сеансе браузера.':doc.kind==='list'?(doc.draft.deleted?'Файл помечен к удалению. Подтвердите через «Сохранить».':doc.saved.deleted?'Новый файл будет создан при сохранении.':'Сохранение списка не перезапускает DNS.'):
+        doc.applyState&&doc.applyState!=='COMMITTED'?'Последний статус применения: '+doc.applyState:
+        doc.applied===doc.saved.text?'Работа сети была подтверждена.':doc.savedInSession?'Файл сохранён. Для загрузки настроек в DNS нажмите «Применить».':'Файл загружен. Применение в этом сеансе не проверялось.';
+    const select=document.getElementById('change-document');
+    if(select){select.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='Открытые файлы';select.append(empty);
+        for(const item of changes.documents.values()){
+            if(!item.id.includes(isTestMode?':test':':live'))continue;
+            const option=document.createElement('option');option.value=item.id;option.textContent=item.label+(changes.dirty(item.id)?' •':'');select.append(option);
+        }select.value=doc?.id||'';select.disabled=busy;
     }
+    const count=document.getElementById('change-count');if(count)count.textContent=changes.dirtyCount()?'Несохранённых файлов: '+changes.dirtyCount():'';
 }
-
-function scheduleSettingsUndoCheckpoint() {
-    if (activeTab !== 'settings' || currentSettingsMode !== 'ui') return;
-    const current = captureSettingsSnapshot();
-    if (!current) return;
-
-    if (!settingsUndoHistory.lastSnapshot) {
-        settingsUndoHistory.lastSnapshot = current;
-        return;
-    }
-    if (settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, current)) return;
-
-    if (!settingsUndoHistory.pending) {
-        pushSettingsUndo(settingsUndoHistory.lastSnapshot);
-        settingsUndoHistory.pending = true;
-    }
-    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
-    settingsUndoHistory.timer = setTimeout(() => {
-        settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
-        settingsUndoHistory.pending = false;
-        settingsUndoHistory.timer = null;
-    }, 500);
+async function reloadEditorDocument() {
+    const doc=changes.get(currentDocumentId());if(!doc||changes.operation)return;
+    if(!confirm('Перечитать '+doc.label+' с роутера? Черновик и история этого файла будут сброшены.'))return;
+    changes.forget(doc.id);
+    if(doc.kind==='config')await loadConfig();else {activeList='';await loadLists();if(!doc.saved.deleted)await selectList(doc.label);}
 }
-
-function restoreSettingsSnapshot(snapshot) {
-    const root = document.getElementById('config-sections');
-    if (!root || !snapshot) return;
-
-    root.innerHTML = snapshot.html;
-    const controls = Array.from(root.querySelectorAll('input, textarea, select'));
-    controls.forEach((el, index) => {
-        const state = snapshot.controls[index];
-        if (!state) return;
-        el.value = state.value;
-        if (state.checked !== null && 'checked' in el) el.checked = state.checked;
-        if (el.tagName === 'SELECT' && state.selectedIndex !== null) el.selectedIndex = state.selectedIndex;
-    });
-
-    if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
-    if (typeof refreshRouteFileOptions === 'function') refreshRouteFileOptions();
-    if (typeof initSortable === 'function') initSortable();
-
-    let focusTarget = snapshot.activeId ? root.querySelector('#' + CSS.escape(snapshot.activeId)) : null;
-    if (!focusTarget && snapshot.activeIndex >= 0) focusTarget = controls[snapshot.activeIndex];
-    if (focusTarget && root.contains(focusTarget)) {
-        focusTarget.focus({ preventScroll: true });
-        try {
-            if (snapshot.selectionStart !== null && typeof focusTarget.setSelectionRange === 'function') {
-                focusTarget.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
-            }
-        } catch (_) {}
-    }
-
-    setTimeout(() => root.querySelectorAll('textarea').forEach(autoResizeTextarea), 0);
-    settingsUndoHistory.lastSnapshot = captureSettingsSnapshot();
-    settingsUndoHistory.pending = false;
-    if (settingsUndoHistory.timer) clearTimeout(settingsUndoHistory.timer);
-    settingsUndoHistory.timer = null;
-    updateSaveButtonState();
+async function openChangeDocument(id) {
+    const doc=changes.get(id);if(!doc)return;
+    if(doc.kind==='config')await switchTab('settings',null);else {await switchTab('lists',null);await selectList(id.split(':').slice(2).join(':'));}
 }
-
-function undoSettingsChange() {
-    commitPendingSettingsEdit();
-    if (!settingsUndoHistory.undo.length) return;
-    const current = captureSettingsSnapshot();
-    const previous = settingsUndoHistory.undo.pop();
-    if (current) {
-        settingsUndoHistory.redo.push(current);
-        if (settingsUndoHistory.redo.length > settingsUndoHistory.limit) settingsUndoHistory.redo.shift();
-    }
-    restoreSettingsSnapshot(previous);
+function updateSaveButtonState() {renderChangeCenter();}
+window.addEventListener('beforeunload',event=>{if(changes.dirtyCount()){event.preventDefault();event.returnValue='';}});
+async function toggleTestMode(enabled) {
+    if(changes.operation){document.getElementById('test-mode-toggle').checked=isTestMode;return;}
+    trackEditorChange();changes.boundary();
+    isTestMode=enabled;activeList='';
+    if(activeTab==='settings')await loadConfig();else if(activeTab==='lists')await loadLists();
+    renderChangeCenter();
 }
-
-function redoSettingsChange() {
-    commitPendingSettingsEdit();
-    if (!settingsUndoHistory.redo.length) return;
-    const current = captureSettingsSnapshot();
-    const next = settingsUndoHistory.redo.pop();
-    if (current) {
-        settingsUndoHistory.undo.push(current);
-        if (settingsUndoHistory.undo.length > settingsUndoHistory.limit) settingsUndoHistory.undo.shift();
-    }
-    restoreSettingsSnapshot(next);
-}
-function toggleTestMode(enabled) { isTestMode = enabled; }
 
 // Центральный обработчик API
 async function apiCall(action, target = null, body = null, strict = false, revision = '') {
@@ -199,30 +165,6 @@ async function apiCall(action, target = null, body = null, strict = false, revis
         return action.startsWith('get_') ? '' : false;
     }
 }
-
-function updateSaveButtonState() {
-    const btn = document.getElementById('global-save-btn');
-    if (!btn) return;
-    
-    let dirty = false;
-    const normalizeText = (text) => text.replace(/\r\n/g, '\n').trim();
-    
-    if (activeTab === 'settings') {
-        const currentText = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
-        dirty = normalizeText(currentText) !== normalizeText(originalConfigContent);
-    } else if (activeTab === 'lists') {
-        const listEl = document.getElementById('list-content');
-        if (listEl && !listEl.disabled) {
-            dirty = normalizeText(listEl.value) !== normalizeText(originalListContent);
-        }
-    }
-
-    btn.disabled = !dirty;
-    btn.className = dirty ? 'btn btn-primary btn-sm fw-bold ms-auto' : 'btn btn-outline-secondary btn-sm fw-bold ms-auto';
-}
-
-function markConfigDirty() { scheduleSettingsUndoCheckpoint(); updateSaveButtonState(); }
-function markListDirty() { updateSaveButtonState(); }
 
 // === АВТОРЕСАЙЗ ТЕКСТОВЫХ ПОЛЕЙ ===
 function autoResizeTextarea(el) {
@@ -319,8 +261,19 @@ function organizeDnsBlocks() {
     } catch (error) { alert(error.message); }
 }
 
+function setSettingsModeView(mode) {
+    currentSettingsMode=mode;
+    document.getElementById('settings-ui-view').style.display=mode==='ui'?'block':'none';
+    document.getElementById('settings-raw-view').style.display=mode==='raw'?'block':'none';
+    document.getElementById('btn-mode-ui').className='btn btn-sm '+(mode==='ui'?'btn-primary':'btn-outline-secondary');
+    document.getElementById('btn-mode-raw').className='btn btn-sm '+(mode==='raw'?'btn-primary':'btn-outline-secondary');
+}
 function switchSettingsMode(mode) {
-    if (currentSettingsMode === mode) return;
+    if (changes.operation || currentSettingsMode === mode) return;
+    trackEditorChange();changes.boundary();
+    if(mode==='raw'&&captureConfigDraft().incomplete){alert('Заполните или удалите незавершённые карточки перед переходом в Raw.');return;}
+    renderingEditor=true;
+    try {
     
     const uiView = document.getElementById('settings-ui-view');
     const rawView = document.getElementById('settings-raw-view');
@@ -359,8 +312,9 @@ function switchSettingsMode(mode) {
             });
             window.rawEditor = rawEditor;
             rawEditor.on('change', () => {
-                document.getElementById('raw-config-text').value = rawEditor.getValue();
-                markConfigDirty();
+                if(renderingEditor)return;
+                const input=document.getElementById('raw-config-text');input.value=rawEditor.getValue();
+                markConfigDirty({type:'input',target:input});rawEditor.clearHistory();
             });
         }
         
@@ -386,15 +340,15 @@ function switchSettingsMode(mode) {
     }
     
     currentSettingsMode = mode;
-    resetSettingsUndoHistory();
+    changes.change(configDocumentId(),captureConfigDraft());changes.boundary();
     updateSaveButtonState();
+    } catch(error){alert(error.message);} finally {renderingEditor=false;}
 }
 
 async function switchTab(tabId, clickedEl, pushState = true) {
-    if (tabId === activeTab) return;
+    if (changes.operation || tabId === activeTab) return;
     
-    const btn = document.getElementById('global-save-btn');
-    if (btn && !btn.disabled && !confirm('У вас есть несохраненные изменения. Перейти?')) return;
+    trackEditorChange();changes.boundary();
     
     activeTab = tabId;
     
@@ -412,22 +366,17 @@ async function switchTab(tabId, clickedEl, pushState = true) {
         window.history.pushState({ tab: tabId }, '', '/' + tabId);
     }
     
-    if (btn) {
-        btn.disabled = true;
-        btn.className = 'btn btn-outline-secondary btn-sm fw-bold ms-auto';
-    }
-    
-    if (tabId === 'settings') {
+    renderChangeCenter();
+
+if (tabId === 'settings') {
         await loadConfig();
     } else if (tabId === 'lists') {
-        activeList = ''; 
-        originalListContent = ''; 
-        document.getElementById('list-content').value = 'Загрузка...';
-        document.getElementById('list-content').disabled = true;
+        document.getElementById('list-content').disabled = !activeList;
         await loadLists();
     } else if (tabId === 'logs') {
         await loadLog();
     }
+    changes.activate(currentDocumentId());renderChangeCenter();
 }
 
 window.addEventListener('popstate', (e) => {
@@ -459,35 +408,23 @@ async function validateConfigOnServer(content) {
 }
 
 async function validateCurrentConfig() {
-    if (activeTab !== 'settings') { alert('Перейдите в настройки для проверки конфигурации.'); return; }
-    try {
-        const content = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
-        await window.reviewValidationReport(await validateConfigOnServer(content), true);
-    } catch (error) { alert('Проверка не выполнена: ' + error.message); }
+    if(activeTab!=='settings'||!changes.begin('validate'))return;
+    try {const draft=captureConfigDraft();if(draft.incomplete)throw new Error(draft.error||'Заполните незавершённые карточки.');await window.reviewValidationReport(await validateConfigOnServer(draft.text),true);}
+    catch(error){alert('Проверка не выполнена: '+error.message);}
+    finally{changes.end();}
 }
 
 async function preflightCurrentConfig() {
-    if (activeTab !== 'settings' || preflightBusy) return;
-    const button = document.getElementById('preflight-config-btn');
-    const restart = document.getElementById('restart-service-btn');
-    const oldHtml = button?.innerHTML;
-    const restartDisabled = restart?.disabled;
-    preflightBusy = true;
-    if (button) { button.disabled = true; button.textContent = 'Тест DNS…'; button.setAttribute('aria-busy', 'true'); }
-    if (restart) restart.disabled = true;
+    if(activeTab!=='settings'||!changes.begin('preflight'))return;
     try {
-        const content = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
-        const error = await validateConfigLogical(content);
-        if (error) { alert(error); return; }
-        if (!await window.reviewValidationReport(await validateConfigOnServer(content))) return;
-        const reply = await apiCall('preflight_config', null, content, true);
-        await window.reviewValidationReport(window.parseValidationReport(reply), true);
-    } catch (error) { alert('Тест DNS не подтверждён: ' + error.message); }
-    finally {
-        preflightBusy = false;
-        if (button) { button.disabled = false; button.innerHTML = oldHtml; button.removeAttribute('aria-busy'); }
-        if (restart) restart.disabled = restartDisabled;
-    }
+        const draft=captureConfigDraft();if(draft.incomplete)throw new Error(draft.error||'Заполните незавершённые карточки.');
+        const content=draft.text;
+        const error=await validateConfigLogical(content);if(error)throw new Error(error);
+        if(!await window.reviewValidationReport(await validateConfigOnServer(content)))return;
+        const reply=await apiCall('preflight_config',null,content,true);
+        await window.reviewValidationReport(window.parseValidationReport(reply),true);
+    }catch(error){alert('Тест DNS не подтверждён: '+error.message);}
+    finally{changes.end();}
 }
 
 // === ОСНОВНОЕ СОХРАНЕНИЕ ===
@@ -498,143 +435,111 @@ async function readConfigSnapshot() {
 }
 
 async function globalSave() {
-    let contentToSave = '';
-    
-    if (activeTab === 'settings') {
-        try {
-            contentToSave = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
-        } catch (error) {
-            alert(error.message);
-            return false;
-        }
-        
-        const error = await validateConfigLogical(contentToSave);
-        if (error) {
-            alert(error);
-            return false;
-        }
-
-        // The router validates this exact text; the same check is repeated on save.
-        try {
-            if (!configRevision || configSnapshotMode !== isTestMode) throw new Error('Заново загрузите конфигурацию выбранного режима перед сохранением.');
-            const report = await validateConfigOnServer(contentToSave);
-            if (!await window.reviewValidationReport(report)) return false;
-            const snapshot = await readConfigSnapshot();
-            if (snapshot.revision !== configRevision) throw new Error('Файл изменён другим сеансом. Ваши правки остались в редакторе. Скопируйте их из Raw и заново загрузите конфигурацию.');
-            if (!await window.reviewConfigChanges(snapshot.content, contentToSave)) return false;
-            const reply = await apiCall('save_config', null, contentToSave, true, configRevision);
-            if (typeof reply !== 'string' || !/^OK\nREVISION [0-9a-f]{64}(?:\n|$)/.test(reply)) {
-                if (typeof reply === 'string' && reply.startsWith('VALIDATION_FAILED\n')) {
-                    await window.reviewValidationReport(window.parseValidationReport(reply.slice(18)), true);
-                    return false;
+    const id=currentDocumentId(),doc=changes.get(id);
+    if(!doc || !changes.begin('save'))return false;
+    try {
+        const snapshot=captureCurrentDraft();
+        if(snapshot.incomplete)throw new Error(snapshot.error||'Заполните незавершённые карточки.');
+        const contentToSave=snapshot.text;
+        changes.change(id,snapshot);
+        if(doc.kind==='config') {
+            const error=await validateConfigLogical(contentToSave);if(error)throw new Error(error);
+            if(!doc.revision)throw new Error('Заново загрузите конфигурацию перед сохранением.');
+            if(!await window.reviewValidationReport(await validateConfigOnServer(contentToSave)))return false;
+            const disk=await readConfigSnapshot();
+            if(disk.revision!==doc.revision)throw new Error('Файл изменён другим сеансом. Ваши правки остались в редакторе.');
+            if(!await window.reviewConfigChanges(disk.content,contentToSave))return false;
+            const reply=await apiCall('save_config',null,contentToSave,true,doc.revision);
+            if(typeof reply!=='string'||!/^OK\nREVISION [0-9a-f]{64}(?:\n|$)/.test(reply)) {
+                if(typeof reply==='string'&&reply.startsWith('VALIDATION_FAILED\n')){
+                    await window.reviewValidationReport(window.parseValidationReport(reply.slice(18)),true);return false;
                 }
-                if (typeof reply === 'string' && reply.startsWith('CONFLICT:')) throw new Error('Файл изменился во время просмотра. Запись отменена; правки сохранены в редакторе.');
-                if (typeof reply === 'string' && reply.startsWith('BUSY:')) throw new Error('Другой сеанс сейчас сохраняет файл. Повторите позже.');
-                throw new Error('Сохранение не подтверждено. Проверьте соединение и возможность создания резервной копии.');
+                throw new Error(typeof reply==='string'&&reply.startsWith('CONFLICT:')?'Файл изменился во время просмотра. Правки остались в редакторе.':'Сохранение не подтверждено. Проверьте соединение и резервные копии.');
             }
-            configRevision = reply.slice(12, 76);
-        } catch (error) {
-            alert(error.message);
-            return false;
+            changes.saved(id,snapshot,reply.slice(12,76));
+        } else {
+            if(snapshot.deleted) {
+                if(!confirm('Удалить файл '+doc.label+'? Его содержимое останется в истории этого сеанса.'))return false;
+                if(!doc.saved.deleted&&!await apiCall('delete_list',doc.label,null,true))throw new Error('Не удалось удалить список.');
+            } else {
+                if(doc.saved.deleted&&!confirm('Создать файл '+doc.label+'?'))return false;
+                if(!await window.reviewConfigChanges(doc.saved.deleted?'':doc.saved.text,contentToSave))return false;
+                if(!await apiCall('save_list',doc.label,contentToSave,true))throw new Error('Не удалось сохранить список.');
+            }
+            changes.saved(id,snapshot);
         }
-        originalConfigContent = contentToSave; 
-        
-    } else if (activeTab === 'lists' && activeList) {
-        contentToSave = document.getElementById('list-content').value;
-        const saved = await apiCall('save_list', activeList, contentToSave);
-        if (!saved) {
-            alert('Не удалось сохранить список. Изменения остались в редакторе.');
-            return false;
-        }
-        originalListContent = contentToSave; 
-    }
-    
-    updateSaveButtonState();
-    return true; 
+        return true;
+    } catch(error) {alert(error.message);return false;}
+    finally {changes.end();}
 }
 
 async function loadConfig() {
-    let snapshot;
-    try { snapshot = await readConfigSnapshot(); }
-    catch (error) { alert(error.message); return; }
-    const content = snapshot.content;
-    configRevision = snapshot.revision;
-    configSnapshotMode = isTestMode;
-    document.getElementById('config-sections').innerHTML = parseConfigToSections(content);
-    organizeConfigSections();
-    if (typeof refreshRouteGroupOptions === 'function') refreshRouteGroupOptions();
-    if (typeof refreshRouteFileOptions === 'function') await refreshRouteFileOptions();
-    
-    const normalized = gatherSectionsText();
-    originalConfigContent = currentSettingsMode === 'ui' ? normalized : content;
-    
-    if (currentSettingsMode === 'raw') {
-        document.getElementById('raw-config-text').value = content;
+    const id=configDocumentId(),mode=isTestMode;
+    if(changes.has(id)) {
+        changes.activate(id);renderConfigDraft(changes.get(id).draft);return;
     }
-    resetSettingsUndoHistory();
-    updateSaveButtonState();
-    
-    setTimeout(() => {
-        document.querySelectorAll('#config-sections textarea').forEach(autoResizeTextarea);
-        initSortable();
-    }, 10);
+    if(!changes.begin('load'))return;
+    try {
+        const snapshot=await readConfigSnapshot();
+        if(mode!==isTestMode||activeTab!=='settings')return;
+        changes.open(id,{text:snapshot.content},{label:isTestMode?'Тестовая конфигурация':'Конфигурация DNS',kind:'config',revision:snapshot.revision});
+        renderConfigDraft(changes.get(id).draft);
+        changes.change(id,captureConfigDraft());
+        renderChangeCenter();
+    } catch(error){alert(error.message);}
+    finally{changes.end();}
 }
 
-let safeApplyBusy = false;
 async function restartService() {
-    if (safeApplyBusy || preflightBusy || activeTab !== 'settings') return;
-    safeApplyBusy = true;
-    const btn = document.getElementById('restart-service-btn');
-    const oldHtml = btn?.innerHTML;
-    let operationObserved = false;
-    if (btn) { btn.disabled=true; btn.textContent='Применение…'; }
+    if(activeTab!=='settings'||!changes.begin('apply'))return;
+    const id=configDocumentId(),doc=changes.get(id);
+    let observed=false,target=null;
+    const monitor=async transaction=>{
+        observed=true;
+        await window.monitorSafeApply(transaction,(action,tid)=>apiCall(action,tid,null,true),state=>changes.applyState(id,state,target));
+    };
     try {
-        if (isTestMode) throw new Error('Применение отключено в тестовом режиме UI. Рабочий DNS не изменён.');
-        let pending = localStorage.getItem('smartdns-apply-transaction');
-        if (!pending && !isTestMode) {
-            const active = await apiCall('get_active_apply',null,null,true);
-            if (active.trim() !== 'NONE') {
-                const found = /^TRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(active);
-                if (!found) throw new Error('Не удалось определить текущую операцию применения.');
-                pending = found[1];localStorage.setItem('smartdns-apply-transaction',pending);
+        if(isTestMode)throw new Error('Применение отключено в тестовом режиме.');
+        let pending=localStorage.getItem('smartdns-apply-transaction');
+        if(!pending) {
+            const active=await apiCall('get_active_apply',null,null,true);
+            if(active.trim()!=='NONE'){
+                const match=/^TRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(active);
+                if(!match)throw new Error('Не удалось определить текущую операцию.');
+                pending=match[1];localStorage.setItem('smartdns-apply-transaction',pending);
             }
         }
-        if (pending) {
-            operationObserved = true;
-            await window.monitorSafeApply(pending, (action,id)=>apiCall(action,id,null,true));
-            return;
-        }
-        if (!configRevision || configSnapshotMode !== isTestMode) throw new Error('Заново загрузите конфигурацию перед применением.');
-        const content = currentSettingsMode === 'ui' ? gatherSectionsText() : document.getElementById('raw-config-text').value;
-        const error = await validateConfigLogical(content);
-        if (error) throw new Error(error);
-        if (!await window.reviewValidationReport(await validateConfigOnServer(content))) return;
-        const snapshot = await readConfigSnapshot();
-        if (snapshot.revision !== configRevision) throw new Error('Файл изменён другим сеансом. Ваши правки остались в редакторе.');
-        if (!await window.reviewConfigChanges(snapshot.content, content, {apply:true})) return;
-        if (!confirm('Применить конфигурацию с перезапуском DNS?\n\nОткат вернёт текущий файл на диске. Он может отличаться от настроек запущенного процесса, если вы ранее сохранили файл без рестарта. Старый файл и кандидат сначала пройдут отдельный тест.\n\nНа проверку и подтверждение отведено 180 секунд с начала операции. Без подтверждения начнётся автоматический откат.')) return;
-        const reply = await apiCall('apply_config', null, content, true, configRevision);
-        const match = /^OK\nTRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(reply);
-        if (!match) throw new Error(String(reply).slice(0,500));
-        operationObserved = true;
-        localStorage.setItem('smartdns-apply-transaction',match[1]);
-        await window.monitorSafeApply(match[1],(action,id)=>apiCall(action,id,null,true));
-    } catch(error) { alert('Применение не подтверждено: '+error.message); }
+        if(pending){await monitor(pending);return;}
+        if(!doc?.revision)throw new Error('Заново загрузите конфигурацию перед применением.');
+        const snapshot=captureConfigDraft();
+        if(snapshot.incomplete)throw new Error(snapshot.error||'Заполните незавершённые карточки.');
+        const content=snapshot.text;
+        const error=await validateConfigLogical(content);if(error)throw new Error(error);
+        if(!await window.reviewValidationReport(await validateConfigOnServer(content)))return;
+        const disk=await readConfigSnapshot();
+        if(disk.revision!==doc.revision)throw new Error('Файл изменён другим сеансом. Правки остались в редакторе.');
+        if(!await window.reviewConfigChanges(disk.content,content,{apply:true}))return;
+        if(!confirm('Применить конфигурацию с перезапуском DNS?\n\nСторож вернёт прежний файл при ошибке или отсутствии подтверждения за 180 секунд. Это предыдущий файл на диске: он мог отличаться от настроек запущенного процесса.'))return;
+        const reply=await apiCall('apply_config',null,content,true,doc.revision);
+        const match=/^OK\nTRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(reply);
+        if(!match)throw new Error(String(reply).slice(0,500));
+        target=content;
+        localStorage.setItem('smartdns-apply-transaction',match[1]);await monitor(match[1]);
+    } catch(error){alert('Применение не подтверждено: '+error.message);}
     finally {
-        safeApplyBusy=false;
-        if(btn) { btn.disabled=false;btn.innerHTML=oldHtml; }
-        // Refresh the saved baseline without overwriting edits made while polling.
-        if (operationObserved) try {
-            const snapshot=await readConfigSnapshot();
-            configRevision=snapshot.revision;originalConfigContent=snapshot.content;
-            updateSaveButtonState();
-        } catch (_) { /* Keep the editor intact if the connection was lost. */ }
+        if(observed)try {
+            const disk=await readConfigSnapshot();changes.saved(id,{text:disk.content},disk.revision);
+        }catch(_){/* Keep the draft and its revision if the connection was lost. */}
+        changes.end();
     }
 }
 
 async function loadLists() {
+    const mode=isTestMode;
     const listsRaw = await apiCall('get_lists');
+    if(mode!==isTestMode||activeTab!=='lists')return;
     const lists = listsRaw.split('\n').filter(l => l.trim() !== '');
+    for(const doc of changes.documents.values())if(doc.kind==='list'&&doc.id.startsWith('list:'+(isTestMode?'test:':'live:'))&&(!doc.saved.deleted||!doc.draft.deleted)&&!lists.includes(doc.label))lists.push(doc.label);
     const container = document.getElementById('lists-container');
     container.replaceChildren();
 
@@ -680,164 +585,69 @@ async function loadLists() {
 }
 
 async function selectList(name) {
-    const btn = document.getElementById('global-save-btn');
-    if (btn && !btn.disabled && activeTab === 'lists' && !confirm('Изменения не сохранены. Продолжить?')) return;
-    
-    activeList = name;
-    
-    document.querySelectorAll('#lists-container .list-group-item').forEach(el => {
-        const selected = el.querySelector('button[aria-label^="Выбрать список"]')?.dataset.listName === name;
-        el.classList.toggle('active', selected);
-        el.classList.toggle('bg-dark', !selected);
-        el.classList.toggle('text-light', !selected);
-        el.classList.toggle('border-secondary', !selected);
-    });
-    
-    document.getElementById('current-list-title').innerText = 'Редактирование: ' + name;
-    
-    const ta = document.getElementById('list-content');
-    ta.disabled = true;
-    ta.value = 'Загрузка...';
-    if (btn) btn.disabled = true; 
-    
-    const content = await apiCall('get_list', name);
-    ta.value = content;
-    ta.disabled = false;
-    
-    originalListContent = content; 
-    updateSaveButtonState();
+    if(changes.operation)return;
+    trackEditorChange();changes.boundary();
+    const previous=activeList;
+    activeList=name;
+    const id=listDocumentId(name),cached=changes.get(id);
+    const ta=document.getElementById('list-content');
+    changes.begin('load');
+    ta.disabled=true;
+    try {
+        const content=cached?cached.draft.text:await apiCall('get_list',name,null,true);
+        ta.value=content;ta.disabled=!!cached?.draft.deleted;
+        document.getElementById('current-list-title').innerText='Редактирование: '+name;
+        changes.open(id,{text:content},{label:name,kind:'list'});
+        document.querySelectorAll('#lists-container .list-group-item').forEach(el=>{
+            const selected=el.querySelector('button[data-list-name]')?.dataset.listName===name;
+            el.classList.toggle('active',selected);
+            for(const cls of ['bg-dark','text-light','border-secondary'])el.classList.toggle(cls,!selected);
+        });
+    } catch(error) {
+        activeList=previous;
+        const draft=changes.get(listDocumentId())?.draft;
+        ta.value=draft?.text||'';ta.disabled=!draft||!!draft.deleted;
+        changes.activate(currentDocumentId());alert(error.message);
+    } finally {changes.end();}
 }
 
 async function createList() {
-    const input = document.getElementById('new-list-name');
-    let name = input.value.replace(/[^a-zA-Z0-9_-]/g, '');
-    if (!name) return;
-    name += '.list';
-    const saved = await apiCall('save_list', name, '');
-    if (!saved) {
-        alert('Не удалось создать список. Проверьте права доступа и журнал.');
-        return;
-    }
-    input.value = '';
-    
-    await loadLists(); 
-    await selectList(name);
+    if(changes.operation)return;
+    const input=document.getElementById('new-list-name');
+    const clean=input.value.replace(/[^a-zA-Z0-9_-]/g,'');if(!clean)return;
+    const name=clean+'.list';
+    const mode=isTestMode;
+    let names;try{names=(await apiCall('get_lists',null,null,true)).split('\n');}catch(error){alert(error.message);return;}
+    if(mode!==isTestMode||activeTab!=='lists')return;
+    if(names.includes(name)||changes.has(listDocumentId(name))){alert('Список с таким именем уже существует.');return;}
+    trackEditorChange();changes.boundary();
+    const id=listDocumentId(name);
+    changes.open(id,{text:'',deleted:true},{label:name,kind:'list'});
+    changes.change(id,{text:''});
+    input.value='';await loadLists();await selectList(name);
 }
-
-async function deleteList(name = activeList) {
-    if (!name || !confirm('Точно удалить ' + name + '?')) return;
-    if (name === activeList) {
-        const saveButton = document.getElementById('global-save-btn');
-        if (saveButton && !saveButton.disabled &&
-            !confirm('В текущем списке есть несохранённые изменения. Удалить список вместе с ними?')) return;
-    }
-
-    const deleted = await apiCall('delete_list', name);
-    if (!deleted) {
-        alert('Не удалось удалить список. Проверьте права доступа и журнал.');
-        return;
-    }
-
-    if (name === activeList) {
-        activeList = '';
-        const ta = document.getElementById('list-content');
-        ta.value = '';
-        ta.disabled = true;
-        originalListContent = '';
-        document.getElementById('current-list-title').innerText = 'Выберите список';
-    }
-    await loadLists();
+async function deleteList(name=activeList) {
+    if(changes.operation||!name)return;
+    await selectList(name);
+    if(activeList!==name)return;
+    changes.change(listDocumentId(name),{text:changes.get().draft.text,deleted:true});
+    renderCurrentDraft(changes.get().draft);
 }
 
 async function loadLog() {
     document.getElementById('log-content').value = await apiCall('get_log');
 }
 
-document.addEventListener('click', (e) => {
-    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
-        !e.target.closest('#config-sections')) return;
-
-    // Structural actions do not fire input/change events, so save the DOM before
-    // adding/removing a route, DNS group, or route-list row.
-    const action = e.target.closest('button[onclick]');
-    const handler = action?.getAttribute('onclick') || '';
-    const changesStructure = /addNewGroupUI|addNewRouteUI|addRouteFileUI|\.closest\('\.(?:group-item|route-item|route-file-row)'\)\.remove\(\)/.test(handler);
-    if (changesStructure) {
-        commitPendingSettingsEdit();
-        const before = captureSettingsSnapshot();
-        if (before && (!settingsUndoHistory.lastSnapshot ||
-            !settingsSnapshotsEqual(settingsUndoHistory.lastSnapshot, before))) {
-            settingsUndoHistory.lastSnapshot = before;
-        }
-        if (before) pushSettingsUndo(before);
-        settingsUndoHistory.lastSnapshot = before;
-        return;
-    }
-
-    commitPendingSettingsEdit();
-}, true);
-
-// Capture a select's state before the user changes it. The DOM value is already
-// updated by the time its change event fires, so relying only on that event can
-// leave undo history with a post-change snapshot.
-const selectUndoBefore = new WeakMap();
-function rememberSelectUndoBefore(target) {
-    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
-        !target || target.tagName !== 'SELECT' ||
-        !target.closest('#config-sections')) return;
-    const snapshot = captureSettingsSnapshot();
-    if (snapshot) selectUndoBefore.set(target, snapshot);
-}
-
-document.addEventListener('focusin', (e) => rememberSelectUndoBefore(e.target), true);
-document.addEventListener('pointerdown', (e) => rememberSelectUndoBefore(e.target), true);
 document.addEventListener('keydown', (e) => {
-    if (!e.ctrlKey && !e.metaKey && !e.altKey) rememberSelectUndoBefore(e.target);
-}, true);
-
-// Select values have already changed when the change event fires. Prefer the
-// snapshot captured on focus/pointer/keyboard interaction, then advance baseline.
-document.addEventListener('change', (e) => {
-    if (activeTab !== 'settings' || currentSettingsMode !== 'ui' ||
-        !e.target || e.target.tagName !== 'SELECT' ||
-        !e.target.closest('#config-sections')) return;
-    const current = captureSettingsSnapshot();
-    const previous = selectUndoBefore.get(e.target) || settingsUndoHistory.lastSnapshot;
-    selectUndoBefore.delete(e.target);
-    if (!current || !previous || settingsSnapshotsEqual(previous, current)) {
-        settingsUndoHistory.lastSnapshot = current || settingsUndoHistory.lastSnapshot;
-        return;
+    if(e.defaultPrevented || e.target.closest?.('dialog'))return;
+    const modifier=(e.ctrlKey||e.metaKey)&&!e.altKey;
+    const editor=e.target.closest?.('#config-sections,#settings-raw-view,#change-center')||e.target.id==='list-content';
+    if(modifier&&editor&&(e.key.toLowerCase()==='z'||e.key.toLowerCase()==='y')){
+        e.preventDefault();e.stopImmediatePropagation();if(e.key.toLowerCase()==='y'||e.shiftKey)redoEditorChange();else undoEditorChange();return;
     }
-
-    // Finish any edit already in progress before recording the select change.
-    // The prior edit has its own undo entry; the select needs an additional
-    // checkpoint for the exact state immediately before this selection.
-    commitPendingSettingsEdit();
-    pushSettingsUndo(previous);
-    settingsUndoHistory.lastSnapshot = current;
-}, true);
-
-document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && !e.altKey && activeTab === 'settings' && currentSettingsMode === 'ui') {
-        const key = e.key.toLowerCase();
-        if (key === 'z' && !e.shiftKey) {
-            e.preventDefault();
-            undoSettingsChange();
-            return;
-        }
-        if (key === 'y' || (key === 'z' && e.shiftKey)) {
-            e.preventDefault();
-            redoSettingsChange();
-            return;
-        }
+    if(modifier&&e.key.toLowerCase()==='s'){
+        e.preventDefault();if(!document.getElementById('global-save-btn').disabled)globalSave();return;
     }
-
-    if (e.ctrlKey && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        const btn = document.getElementById('global-save-btn');
-        if (!btn.disabled) globalSave();
-    }
-    
     if (e.ctrlKey && e.key === '/') {
         const el = document.activeElement;
         if (el && el.tagName === 'TEXTAREA') {
@@ -847,7 +657,7 @@ document.addEventListener('keydown', (e) => {
             if (activeTab === 'lists') markListDirty();
         }
     }
-});
+},true);
 
 function toggleCommentRaw(cm) {
     const from = cm.getCursor('from');
@@ -992,6 +802,7 @@ function initSortable() {
     containers.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
+            if(Sortable.get?.(el))return;
             Sortable.create(el, {
                 handle: '.drag-handle',
                 animation: 150,

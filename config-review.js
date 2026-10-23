@@ -65,9 +65,9 @@
             const heading = document.createElement('h2');
             heading.id = 'config-review-title';
             heading.className = 'h5';
-            heading.textContent = 'Изменения конфигурации';
+            heading.textContent = options.title ? 'Изменения: '+options.title : 'Изменения конфигурации';
             const description = document.createElement('p');
-            description.textContent = options.apply ? 'Проверьте изменения перед применением и перезапуском DNS.' : 'Проверьте изменения перед сохранением файла.';
+            description.textContent = options.preview ? 'Просмотр правок относительно последнего сохранённого файла. Этот просмотр ничего не записывает.' : options.apply ? 'Проверьте изменения перед применением и перезапуском DNS.' : 'Проверьте изменения перед сохранением файла.';
             const pre = document.createElement('pre');
             pre.style.cssText = 'max-height:55vh;overflow:auto;white-space:pre;tab-size:4';
             pre.tabIndex = 0;
@@ -100,7 +100,7 @@
                 row.textContent = '⋯ ' + count + ' строк без изменений'; pre.append(row);
             }
             const cancel = document.createElement('button');
-            cancel.type = 'button'; cancel.className = 'btn btn-secondary me-2'; cancel.textContent = 'Отмена';
+            cancel.type = 'button'; cancel.className = 'btn btn-secondary me-2'; cancel.textContent = options.preview ? 'Закрыть' : 'Отмена';
             const save = document.createElement('button');
             save.type = 'button'; save.className = 'btn btn-primary'; save.textContent = options.apply ? 'Далее к применению' : 'Сохранить файл';
             const finish = accepted => {
@@ -111,7 +111,8 @@
             cancel.onclick = () => finish(false);
             save.onclick = () => finish(true);
             dialog.addEventListener('cancel', event => { event.preventDefault(); finish(false); });
-            dialog.append(heading, description, pre, cancel, save);
+            dialog.append(heading, description, pre, cancel);
+            if(!options.preview)dialog.append(save);
             document.body.append(dialog);
             dialog.showModal(); cancel.focus();
         });

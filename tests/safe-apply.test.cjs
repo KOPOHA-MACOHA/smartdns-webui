@@ -59,7 +59,7 @@ test('lost status response disables confirmation and displays an unknown result'
  w.HTMLDialogElement.prototype.showModal=function(){};w.HTMLDialogElement.prototype.close=function(){};w.setTimeout=()=>1;w.clearTimeout=()=>{};w.eval(fs.readFileSync(require.resolve('../safe-apply.js'),'utf8'));
  try{const promise=w.monitorSafeApply('tx-ABCDEFGHIJKL',async()=>{throw Error('offline')});await flush();assert.equal(w.document.querySelector('dialog button').disabled,true);assert.match(w.document.querySelector('[role=status]').textContent,/неизвестен/);w.document.querySelectorAll('dialog button')[2].click();await promise;}finally{w.close()}
 });
-const app=fs.readFileSync(require.resolve('../app.js'),'utf8');const source=app.slice(app.indexOf('let safeApplyBusy ='),app.indexOf('async function loadLists()'));
+const app=fs.readFileSync(require.resolve('../app.js'),'utf8');const source=app.slice(app.indexOf('async function restartService()'),app.indexOf('async function loadLists()'));
 function editor({accept=true,stale=false,testMode=false}={}) {
  const dom=new JSDOM('<button id="restart-service-btn">Apply</button>',{url:'http://localhost'});const calls=[];const storage=new Map();let text='candidate';
  const context={document:dom.window.document,activeTab:'settings',safeApplyBusy:false,preflightBusy:false,isTestMode:testMode,configSnapshotMode:testMode,configRevision:'original',currentSettingsMode:'ui',originalConfigContent:'before',
@@ -69,11 +69,14 @@ function editor({accept=true,stale=false,testMode=false}={}) {
   window:{reviewValidationReport:async()=>true,reviewConfigChanges:async()=>true,monitorSafeApply:async()=>{text='edited while applying'}},
   apiCall:async(action,target,body,strict,revision)=>{calls.push(action);if(action==='get_active_apply')return 'NONE\n';assert.equal(action,'apply_config');assert.equal(body,'candidate');assert.equal(revision,'original');return 'OK\nTRANSACTION tx-ABCDEFGHIJKL\n'}
  };
+ context.changes=new (require('../change-center.js').ChangeController)();
+ context.configDocumentId=()=> 'config:live';context.captureConfigDraft=()=>({text});
+ context.changes.open('config:live',{text:'before'},{revision:'original'});
  vm.createContext(context);vm.runInContext(source,context);return {dom,context,calls,getText:()=>text};
 }
 test('apply sends the reviewed snapshot directly, without saving it before arming rollback',async()=>{
  const e=editor();try{await e.context.restartService();assert.deepEqual(e.calls,['get_active_apply','apply_config']);assert.equal(e.getText(),'edited while applying');assert.equal(e.dom.window.document.querySelector('button').disabled,false);}finally{e.dom.window.close()}
 });
 test('cancel, stale revision and UI test mode cannot launch live application',async()=>{
- for(const options of [{accept:false},{stale:true},{testMode:true}]){const e=editor(options);try{await e.context.restartService();assert(!e.calls.includes('apply_config'));assert(!e.calls.includes('save_config'));assert(!e.calls.includes('restart_service'));assert.equal(e.context.configRevision,'original');}finally{e.dom.window.close()}}
+ for(const options of [{accept:false},{stale:true},{testMode:true}]){const e=editor(options);try{await e.context.restartService();assert(!e.calls.includes('apply_config'));assert(!e.calls.includes('save_config'));assert(!e.calls.includes('restart_service'));assert.equal(e.context.changes.get().revision,'original');}finally{e.dom.window.close()}}
 });

@@ -7,7 +7,7 @@
         if (!match || !labels[match[1]]) throw new Error('Неизвестный ответ операции применения');
         return {state:match[1],deadline:Number(match[2])};
     }
-    function monitorSafeApply(id, request) {
+    function monitorSafeApply(id, request, onState) {
         if (!/^tx-[A-Za-z0-9]{12}$/.test(id)) return Promise.reject(new Error('Некорректный номер операции'));
         return new Promise(resolve => {
             const prior = document.activeElement;
@@ -30,6 +30,7 @@
                 try {
                     const result=parseApplyStatus(await request(action,id));
                     status.textContent=labels[result.state];
+                    if(typeof onState==='function')onState(result.state);
                     const left=Math.max(0,result.deadline-Math.floor(Date.now()/1000));
                     detail.textContent='Операция '+id+(terminal.has(result.state)?'':' · до автоматического отката: '+left+' с');
                     done=terminal.has(result.state);
