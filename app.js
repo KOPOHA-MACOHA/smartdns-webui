@@ -641,11 +641,16 @@ async function loadLog() {
 document.addEventListener('keydown', (e) => {
     if(e.defaultPrevented || e.target.closest?.('dialog'))return;
     const modifier=(e.ctrlKey||e.metaKey)&&!e.altKey;
-    const editor=e.target.closest?.('#config-sections,#settings-raw-view,#change-center')||e.target.id==='list-content';
-    if(modifier&&editor&&(e.key.toLowerCase()==='z'||e.key.toLowerCase()==='y')){
-        e.preventDefault();e.stopImmediatePropagation();if(e.key.toLowerCase()==='y'||e.shiftKey)redoEditorChange();else undoEditorChange();return;
+    // Physical keys also work with Russian and other keyboard layouts.
+    const key=({KeyZ:'z',KeyY:'y',KeyS:'s'})[e.code]||e.key.toLowerCase();
+    const inEditor=e.target.closest?.('#config-sections,#settings-raw-view,#change-center')||e.target.id==='list-content';
+    const otherInput=!inEditor&&e.target.closest?.('input,textarea,select,[contenteditable="true"]');
+    // Native controls and rebuilding the form can leave focus on body.
+    const editorPage=(activeTab==='settings'||activeTab==='lists')&&!otherInput;
+    if(modifier&&editorPage&&(key==='z'||key==='y')){
+        e.preventDefault();e.stopImmediatePropagation();if(key==='y'||e.shiftKey)redoEditorChange();else undoEditorChange();return;
     }
-    if(modifier&&e.key.toLowerCase()==='s'){
+    if(modifier&&key==='s'){
         e.preventDefault();if(!document.getElementById('global-save-btn').disabled)globalSave();return;
     }
     if (e.ctrlKey && e.key === '/') {
