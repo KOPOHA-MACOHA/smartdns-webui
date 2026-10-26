@@ -1,43 +1,26 @@
-/* Presentation preferences only. Configuration drafts stay in ChangeController. */
+/* Navigation and presentation only; drafts belong to ChangeController. */
 (function () {
     'use strict';
     const root = document.documentElement;
-    const media = window.matchMedia('(max-width: 767.98px)');
-    const preference = 'smartdns-sidebar-collapsed';
-    let collapsed = false;
-    let mobileOpen = false;
-    try { collapsed = localStorage.getItem(preference) === '1'; } catch (_) {}
-
-    function renderSidebar() {
-        root.dataset.sidebar = collapsed ? 'collapsed' : 'expanded';
-        root.dataset.menuOpen = String(mobileOpen && media.matches);
-        const toggle = document.getElementById('sidebar-toggle');
-        toggle.setAttribute('aria-expanded', String(!collapsed));
-        toggle.title = collapsed ? 'Развернуть меню' : 'Свернуть меню';
-        toggle.querySelector('.nav-label').textContent = toggle.title;
-        document.getElementById('mobile-menu-toggle').setAttribute('aria-expanded', String(mobileOpen && media.matches));
-        document.getElementById('mobile-menu-toggle').setAttribute('aria-label', mobileOpen ? 'Закрыть меню' : 'Открыть меню');
-        document.getElementById('menu-backdrop').hidden = !mobileOpen || !media.matches;
-        // Prevent tabbing into the offscreen drawer; desktop icons remain accessible.
-        document.getElementById('app-navigation').inert = media.matches && !mobileOpen;
-        document.getElementById('main-content').inert = media.matches && mobileOpen;
-    }
-    window.closeMobileMenu = function (returnFocus = false) {
-        mobileOpen = false;
-        renderSidebar();
-        if (returnFocus && media.matches) document.getElementById('mobile-menu-toggle').focus();
+    let actionsOpen = false;
+    window.closeActionPanel = function (returnFocus = false) {
+        actionsOpen = false;
+        const panel = document.getElementById('action-panel');
+        panel.hidden = true; panel.inert = true;
+        document.getElementById('action-backdrop').hidden = true;
+        document.getElementById('settings-toggle').setAttribute('aria-expanded', 'false');
+        document.querySelector('.app-shell').inert = false;
+        if (returnFocus) document.getElementById('settings-toggle').focus();
     };
-    window.toggleSidebar = function () {
-        if (media.matches) {
-            mobileOpen = !mobileOpen;
-            renderSidebar();
-            if (mobileOpen) (document.querySelector('#app-navigation [aria-current="page"]') || document.querySelector('#app-navigation nav button')).focus();
-            else document.getElementById('mobile-menu-toggle').focus();
-        } else {
-            collapsed = !collapsed;
-            try { localStorage.setItem(preference, collapsed ? '1' : '0'); } catch (_) {}
-            renderSidebar();
-        }
+    window.toggleActionPanel = function () {
+        if (actionsOpen) return window.closeActionPanel(true);
+        actionsOpen = true;
+        const panel = document.getElementById('action-panel');
+        panel.hidden = false; panel.inert = false;
+        document.getElementById('action-backdrop').hidden = false;
+        document.getElementById('settings-toggle').setAttribute('aria-expanded', 'true');
+        document.querySelector('.app-shell').inert = true;
+        panel.querySelector('button').focus();
     };
     const sections = {
         core: ['Основные параметры', 'Параметры DNS, кэш, обработка запросов и серверы по умолчанию.'],
@@ -53,21 +36,30 @@
         const content = sections[page === 'settings' ? section : page] || sections.core;
         document.getElementById('page-title').textContent = content[0];
         document.getElementById('page-description').textContent = content[1];
+        root.dataset.page = page;
+        window.fitEditorPanes?.();
         document.querySelector('.page-eyebrow').textContent = 'SMARTDNS / ' + (page === 'logs' ? 'ДИАГНОСТИКА' : 'НАСТРОЙКИ');
-        document.querySelectorAll('#app-navigation [data-page]').forEach(button => {
-            const selected = button.dataset.page === page && (page !== 'settings' || button.dataset.section === section);
+        document.querySelectorAll('#app-navigation [data-page],#settings-section-tabs [data-section]').forEach(button => {
+            const selected = button.dataset.page ? button.dataset.page === page : page === 'settings' && button.dataset.section === section;
             button.classList.toggle('active', selected);
             if (selected) button.setAttribute('aria-current', 'page');
             else button.removeAttribute('aria-current');
         });
     };
-    function finishNavigation() {
-        if (media.matches && mobileOpen) {
-            window.closeMobileMenu();
-            document.getElementById('page-title').focus({preventScroll: true});
-        }
-        window.scrollTo({top: 0, behavior: 'instant'});
-    }
+    window.fitEditorPanes = function () {
+        const fit = () => {
+            for (const el of document.querySelectorAll('#settings-raw-view .CodeMirror,#raw-config-text,.list-editor-frame,#log-view,#log-content')) {
+                if (!el.getClientRects().length) continue;
+                const height = Math.max(240,window.innerHeight - el.getBoundingClientRect().top - 16);
+                const value = height + 'px';
+                if (el.style.height !== value) el.style.height = value;
+            }
+        };
+        if (window.requestAnimationFrame) window.requestAnimationFrame(fit); else fit();
+    };
+    window.addEventListener('resize', window.fitEditorPanes);
+    if (window.ResizeObserver) new ResizeObserver(window.fitEditorPanes).observe(document.querySelector('.app-main'));
+    function finishNavigation() { window.scrollTo({top:0,behavior:'instant'}); window.fitEditorPanes(); }
     window.openSettingsSection = async function (section) {
         if (!['core', 'groups', 'routing'].includes(section) || changes.operation) return;
         await switchTab('settings', null);
@@ -78,24 +70,22 @@
         finishNavigation();
     };
     window.openShellPage = async function (page) {
-        if (!['lists', 'logs'].includes(page) || changes.operation) return;
+        if (!['settings', 'lists', 'logs'].includes(page) || changes.operation) return;
         await switchTab(page, null);
         if (activeTab === page) finishNavigation();
     };
     document.addEventListener('keydown', event => {
-        if (!mobileOpen || !media.matches) return;
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            window.closeMobileMenu(true);
-        } else if (event.key === 'Tab') {
-            const buttons = [...document.querySelectorAll('#app-navigation nav button:not(:disabled)')];
-            if (!buttons.length) return;
-            const first = buttons[0], last = buttons[buttons.length - 1];
-            if (!document.getElementById('app-navigation').contains(document.activeElement)) {event.preventDefault(); (event.shiftKey ? last : first).focus();}
-            else if (event.shiftKey && document.activeElement === first) {event.preventDefault(); last.focus();}
-            else if (!event.shiftKey && document.activeElement === last) {event.preventDefault(); first.focus();}
+        if (actionsOpen) {
+            // Native review dialogs and Bootstrap dialogs manage their own keyboard focus.
+            if (document.querySelector('dialog[open],.modal.show')) return;
+            if (event.key === 'Escape') { event.preventDefault(); window.closeActionPanel(true); }
+            else if (event.key === 'Tab') {
+                const controls = [...document.querySelectorAll('#action-panel button:not(:disabled),#action-panel select:not(:disabled),#action-panel summary,#action-panel input:not(:disabled)')].filter(el => !el.closest('details:not([open])') || el.tagName === 'SUMMARY');
+                const first = controls[0], last = controls.at(-1);
+                if (!document.getElementById('action-panel').contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); first.focus(); }
+                else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            }
+            return;
         }
     });
-    media.addEventListener('change', () => { mobileOpen = false; renderSidebar(); });
-    renderSidebar();
 })();

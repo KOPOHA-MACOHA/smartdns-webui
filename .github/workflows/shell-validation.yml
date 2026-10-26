@@ -63,7 +63,9 @@ jobs:
         run: sh tests/validator.test.sh
 
       - name: Test isolated native configuration preparation
-        run: sh tests/preflight-prepare.test.sh
+        run: |
+          sh tests/preflight-prepare.test.sh
+          sh tests/preflight-retry.test.sh
 
       - name: Test guarded application with disposable files and mocked service
         run: |

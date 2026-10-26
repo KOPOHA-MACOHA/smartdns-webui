@@ -40,8 +40,9 @@ preflight {
         name=option("name","n");path=option("file","f");type=option("type","t");if(type=="")type="list"
         if(type!="list") {report("E",FNR,"Для нативной проверки пока поддерживаются только обычные списки domain-set.");next}
         if(name=="" || path=="" || path ~ /[\t\r\n*?\[]/) {report("E",FNR,"Нельзя безопасно скопировать этот domain-set для проверки.");next}
-        if(name in listid){report("E",FNR,"Повторные domain-set требуют отдельной поддержки изолированной проверки.");next}
-        id=++listcount;listid[name]=id
+        id=++listcount
+        if(!(name in listid))listid[name]=id
+        setfiles[name,++setfilecount[name]]=id
         print "LIST\t" id "\t" path > (work "/files")
         print "domain-set -name " quote(name) " -type list -file " quote(work "/list-" id) > (work "/sandbox.conf")
         next
@@ -95,7 +96,10 @@ END {
     }
     for(j=1;j<=routecount;j++) {
         if(routeset[j]!="") {sample=listid[routeset[j]];kind="LIST"}else{sample=routedomain[j];kind="DOMAIN"}
-        print "ROUTE\t" routegroup[j] "\t16530\t" kind "\t" sample > (work "/probes")
+        if(routeset[j]!="") {
+            for(k=1;k<=setfilecount[routeset[j]];k++)
+                print "ROUTE\t" routegroup[j] "\t16530\tLIST\t" setfiles[routeset[j],k] > (work "/probes")
+        } else print "ROUTE\t" routegroup[j] "\t16530\t" kind "\t" sample > (work "/probes")
     }
     report("I",0,"Временная копия: только localhost, отдельные файлы, кэш 64 записи, без prefetch и сохранения кэша. Исходный конфиг не меняется.")
 }

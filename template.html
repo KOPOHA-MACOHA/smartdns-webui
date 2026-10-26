@@ -12,14 +12,13 @@
     <!-- ДОБАВЛЕНО ДЛЯ ПОДСВЕТКИ СИНТАКСИСА -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/dracula.min.css">
-    <link rel="stylesheet" href="ui.css?v=1">
+    <link rel="stylesheet" href="ui.css?v=6">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 
 <header class="app-topbar">
     <div class="topbar-inner">
-        <button id="mobile-menu-toggle" class="shell-icon" type="button" onclick="toggleSidebar()" aria-controls="app-navigation" aria-expanded="false" aria-label="Открыть меню"><i class="bi bi-list" aria-hidden="true"></i></button>
         <a class="app-brand" href="/settings" onclick="event.preventDefault();openSettingsSection('core')"><strong>SMARTDNS</strong><span>WEBUI</span></a>
         <span class="app-topbar-caption">Управление DNS</span>
         <div class="topbar-actions">            <button id="btn-update" class="btn btn-outline-secondary btn-sm fw-bold position-relative me-3" disabled onclick="performUpdate()">
@@ -27,66 +26,27 @@
                 <span id="update-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-success border border-dark rounded-circle d-none"></span>
             </button>
             
-            <div class="form-check form-switch mx-3 mb-0">
-                <input class="form-check-input" type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
-                <label class="form-check-label text-light small" for="test-mode-toggle">Тест-режим</label>
-            </div>
+
             <button id="theme-toggle" class="btn btn-outline-secondary btn-sm me-1" type="button" onclick="toggleTheme()" title="Переключить тему" aria-label="Переключить тему"><i class="bi bi-moon-stars"></i></button>
+            <button id="settings-toggle" class="shell-icon" type="button" onclick="toggleActionPanel()" aria-controls="action-panel" aria-expanded="false" aria-label="Настройки и действия" title="Настройки и действия"><i class="bi bi-gear" aria-hidden="true"></i></button>
 </div>
     </div>
 </header>
 <div class="app-shell">
     <div class="app-layout">
-        <button id="menu-backdrop" type="button" aria-label="Закрыть меню" onclick="closeMobileMenu(true)" tabindex="-1" hidden></button>
-        <aside id="app-navigation" class="app-sidebar" aria-label="Основная навигация">
-            <div class="sidebar-caption">НАСТРОЙКИ DNS</div>
-            <nav class="nav nav-pills flex-column">
-                <button type="button" class="nav-link active" data-page="settings" data-section="core" title="Основные параметры" onclick="openSettingsSection('core')"><i class="bi bi-sliders" aria-hidden="true"></i><span class="nav-label">Основные параметры</span></button>
-                <button type="button" class="nav-link" data-page="settings" data-section="groups" title="Группы DNS" onclick="openSettingsSection('groups')"><i class="bi bi-diagram-3" aria-hidden="true"></i><span class="nav-label">Группы DNS</span></button>
-                <button type="button" class="nav-link" data-page="settings" data-section="routing" title="Маршрутизация" onclick="openSettingsSection('routing')"><i class="bi bi-signpost-split" aria-hidden="true"></i><span class="nav-label">Маршрутизация</span></button>
-                <button type="button" class="nav-link" data-page="lists" title="Списки доменов" onclick="openShellPage('lists')"><i class="bi bi-list-ul" aria-hidden="true"></i><span class="nav-label">Списки доменов</span></button>
-                <button type="button" class="nav-link" data-page="logs" title="Журнал SmartDNS" onclick="openShellPage('logs')"><i class="bi bi-journal-text" aria-hidden="true"></i><span class="nav-label">Журнал SmartDNS</span></button>
-            </nav>
-            <div class="sidebar-footer">
-                <div class="sidebar-hints"><span>Ctrl+S <small>Сохранить</small></span><span>Ctrl+Z / Ctrl+Y <small>Отмена / повтор</small></span></div>
-                <button id="sidebar-toggle" type="button" class="nav-link" onclick="toggleSidebar()" aria-controls="app-navigation" aria-expanded="true" title="Свернуть меню"><i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i><span class="nav-label">Свернуть меню</span></button>
-            </div>
-        </aside>
+        <nav id="app-navigation" class="main-tabs" aria-label="Основная навигация">
+<button type="button" data-page="settings" onclick="openShellPage('settings')"><i class="bi bi-sliders" aria-hidden="true"></i> Настройки</button>
+<button type="button" data-page="lists" onclick="openShellPage('lists')"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Списки</button>
+<button type="button" data-page="logs" onclick="openShellPage('logs')"><i class="bi bi-journal-text" aria-hidden="true"></i> Журнал</button>
+</nav>
         <main class="app-main" id="main-content" tabindex="-1">
             <div class="page-heading"><p class="page-eyebrow">SMARTDNS / НАСТРОЙКИ</p><h1 id="page-title" tabindex="-1">Основные параметры</h1><p id="page-description">Параметры DNS, кэш и серверы по умолчанию.</p></div>
-<section id="change-center" class="card mb-3" aria-label="Изменения">
- <div class="card-header d-flex flex-wrap gap-2"><strong>Изменения</strong><span id="change-count" class="small text-muted ms-auto"></span></div>
- <div class="card-body">
-  <div class="d-flex flex-wrap align-items-center gap-2 mb-2"><select id="change-document" class="form-select" style="width:auto;max-width:100%" aria-label="Открытый файл" onchange="openChangeDocument(this.value)"></select><span id="change-status" role="status" aria-live="polite"></span></div>
-  <div class="d-flex flex-wrap gap-2">
-   <button id="undo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="undoEditorChange()" disabled>Отменить (Ctrl+Z)</button>
-   <button id="redo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="redoEditorChange()" disabled>Повторить</button>
-   <button id="diff-change-btn" class="btn btn-sm btn-outline-secondary" onclick="previewEditorChanges()" disabled>Посмотреть diff</button>
 
-
-               <button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="globalSave()" disabled>
-                <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
-            </button>
-
-
-            <button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
-                <i class="bi bi-arrow-repeat me-1"></i> Применить
-            </button>
-
-  </div>
-  <details class="mt-2"><summary class="small text-muted">Проверка и другие действия</summary><div class="d-flex flex-wrap gap-2 mt-2"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled>Перечитать файл</button>
-<button id="discard-change-btn" class="btn btn-sm btn-outline-secondary" onclick="discardEditorChanges()" disabled>Сбросить правки</button>
-<button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button>
-<button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button>
-<button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled>Разложить DNS по блокам</button></div></details>
-  <div id="change-detail" class="small text-muted mt-2"></div>
- </div>
-</section>
             <div id="tab-settings" class="tab-content active">
-                <div class="d-flex mb-3 gap-2">
+                <div class="editor-tabs"><div id="settings-section-tabs" class="section-tabs" aria-label="Разделы конфигурации"><button type="button" data-section="core" onclick="openSettingsSection('core')">Основные</button><button type="button" data-section="groups" onclick="openSettingsSection('groups')">DNS-группы</button><button type="button" data-section="routing" onclick="openSettingsSection('routing')">Правила и статика</button></div><div class="mode-tabs">
                     <button id="btn-mode-ui" class="btn btn-sm btn-primary" onclick="switchSettingsMode('ui')">Визуальный режим</button>
                     <button id="btn-mode-raw" class="btn btn-sm btn-outline-secondary" onclick="switchSettingsMode('raw')">Сырой конфиг (Raw)</button>
-                </div>
+                </div></div>
                 
                 <div id="settings-ui-view">
                     <div id="config-sections"></div>
@@ -97,41 +57,28 @@
             </div>
 
             <div id="tab-lists" class="tab-content">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div id="lists-container" class="list-group mb-3"></div>
-                        <div class="input-group">
-                            <input type="text" id="new-list-name" class="form-control bg-dark text-light border-secondary" placeholder="Имя (без .list)">
-                            <button class="btn btn-outline-success" onclick="createList()"><i class="bi bi-plus-lg"></i></button>
-                        </div>
-                    </div>
-                    <div class="col-md-9">
-                        <div class="card bg-dark border-secondary">
-                            <div class="card-header border-secondary d-flex justify-content-between align-items-center">
-                                <span id="current-list-title">Выберите список</span>
-                            </div>
-                            <textarea id="list-content" class="form-control code-font border-0 rounded-0" rows="20" disabled oninput="markListDirty(event)"></textarea>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="tab-logs" class="tab-content">
-                <div class="card bg-dark border-secondary">
-                    <div class="card-header border-secondary d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-journal-text me-2"></i>Логи</span>
-                        <div>
-                            <button class="btn btn-sm btn-warning" onclick="apiCall('clear_log').then(loadLog)"><i class="bi bi-broom"></i> Очистить</button>
-                            <button class="btn btn-sm btn-outline-info ms-2" onclick="loadLog()"><i class="bi bi-arrow-clockwise"></i> Обновить</button>
-                        </div>
-                    </div>
-                    <textarea id="log-content" class="form-control code-font border-0 rounded-0" rows="25" readonly></textarea>
-                </div>
-            </div>
+<div class="list-tabs-bar"><div id="lists-container" class="list-group" aria-label="Файлы списков"></div><div class="input-group new-list-control"><input type="text" id="new-list-name" class="form-control" placeholder="Новый список" aria-label="Имя нового списка"><button class="btn btn-outline-info" onclick="createList()" aria-label="Создать список"><i class="bi bi-plus-lg"></i></button></div></div>
+<div class="editor-toolbar"><span id="current-list-title">Выберите список</span><span id="list-stats" class="text-muted" role="status"></span><button id="list-next-duplicate" class="btn btn-sm btn-outline-secondary" hidden onclick="nextListDuplicate()">Следующий повтор</button><label class="editor-search"><i class="bi bi-search" aria-hidden="true"></i><input id="list-search" class="form-control" type="search" placeholder="Найти домен" aria-label="Найти в списке" oninput="findListText()" onkeydown="if(event.key==='Enter'){event.preventDefault();findListText(true)}"></label><span id="list-search-status" class="text-muted" role="status"></span></div>
+<div class="list-editor-frame"><pre id="list-line-numbers" aria-hidden="true">1</pre><div class="list-code-surface"><pre id="list-paint" aria-hidden="true"></pre><textarea id="list-content" class="form-control code-font" spellcheck="false" wrap="off" disabled aria-label="Содержимое списка доменов" oninput="markListDirty(event);refreshListPresentation()" onscroll="syncListGutter()"></textarea></div></div>
+</div>
+<div id="tab-logs" class="tab-content">
+<div class="log-toolbar"><label class="editor-search"><i class="bi bi-search" aria-hidden="true"></i><input id="log-search" type="search" class="form-control" placeholder="Домен, клиент, группа или текст" aria-label="Поиск в журнале" oninput="renderLogView(true)"></label><select id="log-level-filter" class="form-select" aria-label="Уровень журнала" onchange="renderLogView(true)"><option value="all">Все уровни</option><option value="problems">Ошибки и предупреждения</option><option value="ERROR">Ошибки</option><option value="WARN">Предупреждения</option><option value="INFO">Информация</option><option value="DEBUG">Отладка</option></select><label class="form-check"><input id="log-raw-toggle" class="form-check-input" type="checkbox" onchange="renderLogView()"> Исходный текст</label><button class="btn btn-outline-info" onclick="loadLog()"><i class="bi bi-arrow-clockwise"></i> Обновить</button><button class="btn btn-outline-danger" onclick="apiCall('clear_log').then(loadLog)">Очистить</button></div>
+<div class="log-status-bar"><div id="log-summary" class="editor-toolbar" role="status"></div><div class="log-pagination"><button id="log-newer" class="btn btn-sm btn-outline-secondary" onclick="changeLogPage(-1)">← Новее</button><span id="log-page-status" class="text-muted"></span><button id="log-older" class="btn btn-sm btn-outline-secondary" onclick="changeLogPage(1)">Старее →</button></div></div>
+<div id="log-view" class="log-view" tabindex="0" aria-label="События SmartDNS"></div><textarea id="log-content" class="form-control code-font" readonly hidden aria-label="Исходный журнал"></textarea>
+</div>
         </main>
     </div>
 </div>
 
+<button id="action-backdrop" type="button" hidden tabindex="-1" aria-label="Закрыть панель действий" onclick="closeActionPanel(true)"></button>
+<aside id="action-panel" role="dialog" aria-modal="true" aria-labelledby="action-panel-title" hidden inert><div class="action-panel-header"><h2 id="action-panel-title">Настройки и действия</h2><button class="shell-icon" onclick="closeActionPanel(true)" aria-label="Закрыть панель"><i class="bi bi-x-lg"></i></button></div><section id="change-center" aria-label="Изменения"><label for="change-document" class="form-label">Открытый файл</label><select id="change-document" class="form-select" onchange="openChangeDocument(this.value)"></select><p id="change-status" role="status" aria-live="polite" class="mt-3 mb-1"></p><p id="change-count" class="small text-muted"></p><section class="action-group"><h3 class="action-heading">Правки</h3><div class="action-buttons"><button id="undo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="undoEditorChange()" disabled>Отменить (Ctrl+Z)</button><button id="redo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="redoEditorChange()" disabled>Повторить</button><button id="diff-change-btn" class="btn btn-sm btn-outline-secondary" onclick="previewEditorChanges()" disabled>Посмотреть diff</button><button id="discard-change-btn" class="btn btn-sm btn-outline-secondary" onclick="discardEditorChanges()" disabled>Сбросить правки</button></div></section><section class="action-group"><h3 class="action-heading">Проверка DNS</h3><p class="settings-section-hint">Проверки не сохраняют конфигурацию и не перезапускают рабочую службу.</p><div class="action-buttons"><button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button><button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button></div></section><section class="action-group"><h3 class="action-heading">Сохранение и применение</h3><p class="settings-section-hint">Сохранение записывает выбранный файл. Применение загружает конфигурацию в SmartDNS с контролем отката.</p><div class="action-buttons"><button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="globalSave()" disabled>
+                <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
+            </button><button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
+                <i class="bi bi-arrow-repeat me-1"></i> Применить
+            </button></div></section><p id="change-detail" class="small text-muted mt-3"></p><section class="action-group"><h3 class="action-heading">Обслуживание файла</h3><div class="action-buttons"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled>Перечитать файл</button><button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled>Разложить DNS по блокам</button></div></section></section><div class="action-panel-footer"><details><summary>Для разработчиков</summary>            <div class="form-check form-switch mx-3 mb-0">
+                <input class="form-check-input" type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
+                <label class="form-check-label text-light small" for="test-mode-toggle">Тест-режим</label>
+            </div><p class="settings-section-hint">Тестовый режим использует отдельные файлы и черновики.</p></details></div></aside>
 
 <div class="modal fade" id="dns-server-modal" tabindex="-1" aria-labelledby="dns-server-modal-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -181,13 +128,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=30"></script>
+<script src="parser.js?v=34"></script>
 <script src="validator.js?v=3"></script>
 <script src="version.js?v=1"></script>
 <script src="config-review.js?v=6"></script>
 <script src="safe-apply.js?v=3"></script>
 <script src="change-center.js?v=1"></script>
-<script src="shell.js?v=1"></script>
-<script src="app.js?v=28"></script>
+<script src="shell.js?v=3"></script>
+<script src="app.js?v=33"></script>
 </body>
 </html>
