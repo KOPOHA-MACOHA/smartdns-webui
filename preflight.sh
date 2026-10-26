@@ -162,17 +162,31 @@ done
 probe webui-preflight.invalid 16530 tcp '192\.0\.2\.123' || { report E 'Проверочный экземпляр не отвечает по TCP.'; exit 1; }
 report I 'Отдельный экземпляр запущен, его UDP/TCP-ответы подтверждены.'
 report I 'Лимиты: 30 с процесса, 25 с запросов, 8 с CPU; RSS контролируется с порогом 16 МБ. Кэш ответов на проверочных портах отключён.'
-failed=0
-while IFS="$tab" read -r kind name port domain; do
-    expected=''
-    [ "$kind:$name" != GROUP:default ] || expected=A
-    if probe "$domain" "$port" udp "$expected"; then
-        if [ "$kind" = GROUP ]; then report I "Группа $name: допустимый DNS-ответ для $domain получен."; else report I "Маршрут $domain → $name: допустимый DNS-ответ получен."; fi
-    else
-        report E "Не подтверждён ответ $domain ($kind, группа $name). Возможны сеть, bootstrap, правила или истечение лимита."
-        failed=1
-    fi
-done < "$work/queries"
+check_queries() {
+    failed=0
+    : > "$work/retry-queries"
+    while IFS="$tab" read -r kind name port domain; do
+        expected=''
+        [ "$kind:$name" != GROUP:default ] || expected=A
+        if probe "$domain" "$port" udp "$expected"; then
+            if [ "$kind" = GROUP ]; then report I "Группа $name: допустимый DNS-ответ для $domain получен."; else report I "Маршрут $domain → $name: допустимый DNS-ответ получен."; fi
+        else
+            printf '%s\t%s\t%s\t%s\n' "$kind" "$name" "$port" "$domain" >> "$work/retry-queries"
+            report I "Ответ $domain ($kind, группа $name) пока не получен; повторим после остальных запросов в пределах общего лимита."
+        fi
+    done < "$work/queries"
+    while IFS="$tab" read -r kind name port domain; do
+        expected=''
+        [ "$kind:$name" != GROUP:default ] || expected=A
+        if probe "$domain" "$port" udp "$expected"; then
+            report I "Повторная проверка $domain ($kind, группа $name): допустимый DNS-ответ получен."
+        else
+            report E "Не подтверждён ответ $domain ($kind, группа $name). Возможны сеть, bootstrap, правила или истечение лимита."
+            failed=1
+        fi
+    done < "$work/retry-queries"
+}
+check_queries
 if grep -i -q -E 'process config failed|unsupported config|invalid parameter|load config failed' "$work/launcher.log" "$work/native.log"; then
     report E 'SmartDNS сообщил об ошибке разбора проверочной копии.'; failed=1
 fi

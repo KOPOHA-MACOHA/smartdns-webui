@@ -153,7 +153,7 @@ const UI = {
             <div class="card-header border-secondary section-header py-2"><span>Логирование</span></div>
             <div class="card-body p-3">
                 <div class="d-flex align-items-center">
-                    <label class="form-label text-light small fw-bold mb-0 me-3">Уровень логов (log-level):</label>
+                    <label for="sec-logging-select" class="form-label text-light small fw-bold mb-0 me-3">Уровень логов (log-level):</label>
                     <span class="log-level-select-wrap"><select id="sec-logging-select" class="form-select form-select-sm bg-secondary text-light border-secondary" onchange="markConfigDirty(event)">
                         ${['fatal','error','warn','notice','info','debug'].map(l => `<option value="${l}" ${l===level?'selected':''}>${l}</option>`).join('')}
                     </select></span>
@@ -180,7 +180,7 @@ const UI = {
         </div>`,
     routeCard: (name, group, files) => `
         <div class="route-item border p-2 mb-2 rounded position-relative shadow-sm">
-            <div class="d-flex gap-2 align-items-center mb-2">
+            <div class="route-heading d-flex gap-2 align-items-center mb-2">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <div class="editable-name route-editable-name flex-grow-1">
                     <span class="route-name-display fw-semibold">${UI.escape(name || 'Новый маршрут')}</span>
@@ -189,15 +189,11 @@ const UI = {
                 </div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.route-item').remove(); markConfigDirty();" title="Удалить маршрут"><i class="bi bi-trash"></i></button>
             </div>
-            <div class="route-files-list">
+            <div class="route-fields">
+                <div class="route-field"><div class="route-field-label">DNS-группа для этих доменов</div><select aria-label="DNS-группа маршрута" class="form-select form-select-sm route-group" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty(event)"><option value="${UI.escape(group)}" selected>${UI.escape(group)}</option></select></div>
+                <div class="route-field"><div class="route-field-label">Списки доменов</div><div class="route-files-list">
                 ${(files || '').split(/\r?\n/).filter(f => f.trim()).map(f => UI.routeFileRow(f)).join('') || '<div class="route-files-empty settings-section-hint mb-2">Списки ещё не добавлены</div>'}
-            </div>
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
-                <button class="btn btn-sm btn-outline-primary" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить список</button>
-                <div class="d-flex align-items-center">
-                    <label class="small text-muted me-2">DNS-группа</label>
-                    <select class="form-select form-select-sm route-group" style="max-width:240px" data-current-group="${UI.escape(group)}" onchange="this.dataset.currentGroup=this.value; markConfigDirty(event)"><option value="${UI.escape(group)}" selected>${UI.escape(group)}</option></select>
-                </div>
+                </div><button class="route-add-file" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить ещё список</button><p class="route-files-note">Все списки в этом правиле используют выбранную DNS-группу.</p></div>
             </div>
         </div>`,
 
@@ -206,11 +202,12 @@ const UI = {
             <div class="group-heading d-flex gap-2 align-items-center mb-2" onclick="toggleDnsGroupFromHeader(event, this)">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
                 <button type="button" class="group-collapse-toggle btn btn-sm btn-link text-reset p-1" onclick="toggleDnsGroup(this)" aria-expanded="true" title="Свернуть DNS-группу" aria-label="Свернуть DNS-группу"><i class="bi bi-chevron-down"></i></button>
-                <div class="editable-name group-editable-name flex-grow-1">
+                <div class="editable-name group-editable-name">
                     <span class="group-name-display fw-semibold">${UI.escape(name || 'Новая DNS-группа')}</span>
                     <input type="text" class="form-control form-control-sm group-name-input d-none" value="${UI.escape(name)}" data-prev-name="${UI.escape(name)}" placeholder="Имя группы" oninput="renameDnsGroup(this); markConfigDirty(event)" onblur="setTimeout(() => finishInlineEdit(this), 120)" onkeydown="if(event.key==='Enter'){event.preventDefault();finishInlineEdit(this)}else if(event.key==='Escape'){finishInlineEdit(this,true)}">
                     <button type="button" class="btn btn-sm btn-link text-secondary p-1" onclick="toggleInlineEdit(this)" title="Переименовать"><i class="bi bi-pencil"></i></button>
                 </div>
+                <div class="group-summary" aria-live="polite"></div>
                 <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.group-item').remove(); refreshRouteGroupOptions(); markConfigDirty();" title="Удалить группу"><i class="bi bi-trash"></i></button>
             </div>
             <div class="group-body">
@@ -222,11 +219,11 @@ const UI = {
             <div class="card-header border-secondary section-header py-2"><span>Основные параметры (Core)</span></div>
             <div class="card-body p-3">
                 ${UI.bindPortField(data)}
-                <div class="dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''} mb-3"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="useSimplifiedDnsBind()">Вернуться к одному полю порта</button><div class="small text-muted mt-2" id="dns-bind-mode-hint" role="status">Упрощённый режим доступен для одной совпадающей пары UDP/TCP без дополнительных аргументов.</div></div>
                 <div class="row mb-3 align-items-center dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Адрес и порт (bind):</label></div>
                     <div class="col-sm-6"><input type="text" id="core-bind" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.bind)}" oninput="markConfigDirty(event)"></div>
                 </div>
+        <div class="row mb-3 dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}"><div class="col-sm-6"><label class="form-label small" for="core-bind-tcp">Адреса TCP DNS (bind-tcp)</label></div><div class="col-sm-6"><textarea id="core-bind-tcp" class="form-control form-control-sm" rows="1" placeholder="Не задано" oninput="markConfigDirty(event)">${UI.escape(data.bind_tcp.join('\n'))}</textarea></div></div>
                 <div class="row mb-3 align-items-center">
                     <div class="col-sm-6"><label class="form-label text-light small mb-0">Размер кэша:</label></div>
                     <div class="col-sm-6"><input type="number" id="core-cache-size" class="form-control form-control-sm bg-secondary text-light border-secondary" value="${UI.escape(data.cache_size)}" oninput="markConfigDirty(event)"></div>
@@ -265,10 +262,10 @@ const UI = {
             </div>
         </div>`,
     coreExtraFields: data => `
-        <div class="row mb-3 dns-bind-advanced ${data.show_simple_bind ? 'd-none' : ''}"><div class="col-sm-6"><label class="form-label small" for="core-bind-tcp">Адреса TCP DNS (bind-tcp)</label></div><div class="col-sm-6"><textarea id="core-bind-tcp" class="form-control form-control-sm code-font" rows="2" placeholder="Не задано" oninput="markConfigDirty(event)">${UI.escape(data.bind_tcp.join('\n'))}</textarea></div></div>
+
         ${[['force-aaaa-soa','Блокировать IPv6-ответы (force-AAAA-SOA)',data.force_aaaa_soa],['cache-persist','Сохранять кэш на диск',data.cache_persist]].map(([id,label,value]) => `<div class="row mb-3"><div class="col-sm-6"><label class="form-label small" for="core-${id}">${label}</label></div><div class="col-sm-6"><select id="core-${id}" class="form-select form-select-sm" onchange="markConfigDirty(event)">${[['','Не задано (наследовать)'],['yes','Да'],['no','Нет'],...(['','yes','no'].includes(value)?[]:[[value,value+' (проверьте значение)']])].map(([v,text])=>`<option value="${UI.escape(v)}" ${v===value?'selected':''}>${UI.escape(text)}</option>`).join('')}</select></div></div>`).join('')}`
 };
-UI.bindPortField = data => `<div class="dns-bind-simple ${data.show_simple_bind?'':'d-none'}"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty(event)"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div></div></div><button type="button" class="btn btn-sm btn-outline-secondary mb-3" onclick="useAdvancedDnsBind()">Расширенные настройки адресов</button></div>`;
+UI.bindPortField = data => `<div class="dns-bind-port"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" ${data.show_simple_bind?'':'disabled'} class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty(event)"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div></div></div><button id="dns-bind-toggle" type="button" class="btn btn-sm btn-outline-info bind-mode-toggle mb-3" aria-expanded="${data.show_simple_bind?'false':'true'}" onclick="this.getAttribute('aria-expanded')==='true'?useSimplifiedDnsBind():useAdvancedDnsBind()"><i class="bi bi-sliders" aria-hidden="true"></i><span>${data.show_simple_bind?'Расширенные настройки адресов':'Скрыть расширенные настройки'}</span></button><div class="small text-muted mb-2" id="dns-bind-mode-hint" role="status"></div></div>`;
 
 function useAdvancedDnsBind() {
     const port = document.getElementById('core-dns-port');
@@ -278,10 +275,17 @@ function useAdvancedDnsBind() {
         document.getElementById('core-bind-tcp').value = value;
         port.dataset.simple = 'no';
     }
-    document.querySelectorAll('.dns-bind-simple').forEach(el=>el.classList.add('d-none'));
+    port.disabled=true;
+    updateBindToggle(true);
     document.querySelectorAll('.dns-bind-advanced').forEach(el=>el.classList.remove('d-none'));
+    if(typeof autoResizeTextarea==='function')autoResizeTextarea(document.getElementById('core-bind-tcp'));
     saveDnsBindMode('advanced');
     // Opening advanced controls alone is not a configuration change.
+}
+function updateBindToggle(advanced) {
+    const toggle=document.getElementById('dns-bind-toggle');
+    if(toggle){toggle.setAttribute('aria-expanded',String(advanced));toggle.querySelector('span').textContent=advanced?'Скрыть расширенные настройки':'Расширенные настройки адресов';}
+    document.getElementById('dns-bind-mode-hint').textContent='';
 }
 function saveDnsBindMode(mode) {
     try { localStorage.setItem('smartdns-ui-bind-mode',mode); } catch (_) {}
@@ -302,7 +306,8 @@ function useSimplifiedDnsBind() {
     }
     const port = document.getElementById('core-dns-port');
     port.value=simple.port; port.dataset.prefix=simple.prefix; port.dataset.simple='yes';
-    document.querySelectorAll('.dns-bind-simple').forEach(el=>el.classList.remove('d-none'));
+    port.disabled=false;
+    updateBindToggle(false);
     document.querySelectorAll('.dns-bind-advanced').forEach(el=>el.classList.add('d-none'));
     saveDnsBindMode('simple');
     return true;
@@ -623,8 +628,8 @@ function addConfigHelp(root) {
     for (const [id,text] of Object.entries(fields)) {
         const field = root.querySelector('#'+id);
         if (!field) continue;
-        const row = field.closest('.row') || field.parentElement.parentElement;
-        const label = (id.startsWith('speed-') ? field.parentElement.querySelector('label') : row.querySelector('label'));
+        const row = field.closest('.row') || field.closest('.card-body') || field.parentElement.parentElement;
+        const label = root.querySelector('label[for="'+id+'"]') || (id.startsWith('speed-') ? field.parentElement.querySelector('label') : row.querySelector('label'));
         if (label && !label.querySelector('.setting-help')) label.insertAdjacentHTML('beforeend', UI.help(text));
     }
     const sections = {
@@ -649,6 +654,11 @@ function addConfigHelp(root) {
         ['.addr-domain','Домены этой ручной записи; несколько доменов разделяются /. Правило применяется также к поддоменам по правилам SmartDNS.'],
         ['.addr-ip','Один или несколько IPv4/IPv6 через запятую. Специальные ответы #, #4, #6 запрещают соответствующие типы; -, -4, -6 отменяют переопределение.']
     ]) root.querySelectorAll(selector).forEach(field => {
+        if(selector==='.group-editable-name'){
+            if(!field.querySelector('.setting-help'))field.insertAdjacentHTML('afterbegin',UI.help(text));return;
+        }
+        const label = field.closest('.route-field')?.querySelector('.route-field-label');
+        if (label) { if (!label.querySelector('.setting-help')) label.insertAdjacentHTML('beforeend',UI.help(text)); return; }
         if (field.nextElementSibling?.classList.contains('setting-help')) return;
         field.insertAdjacentHTML('afterend',UI.help(text));
     });

@@ -10,7 +10,7 @@ case "$REPO_REF" in
     *[!A-Za-z0-9._/-]*|""|/*|*..*) echo "ERROR: некорректный REPO_REF" >&2; exit 1 ;;
 esac
 REPO_URL="https://raw.githubusercontent.com/KOPOHA-MACOHA/smartdns-webui/$REPO_REF"
-FILES="index.cgi api.sh template.html parser.js validator.js validator.awk validator-46.1.txt preflight.sh preflight-prepare.awk apply.sh apply-runtime.sh apply-plan.awk safe-apply.js version.js config-review.js change-center.js app.js version.txt"
+FILES="index.cgi api.sh template.html parser.js validator.js validator.awk validator-46.1.txt preflight.sh preflight-prepare.awk apply.sh apply-runtime.sh apply-plan.awk safe-apply.js version.js config-review.js change-center.js shell.js ui.css app.js version.txt"
 T="$(date +%Y%m%d-%H%M%S)-$$"
 BACKUP_ROOT="/opt/var/backups/smartdns-webui"
 BACKUP_DIR="$BACKUP_ROOT/$T"

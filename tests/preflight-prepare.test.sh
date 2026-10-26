@@ -40,3 +40,11 @@ printf 'server 1.1.1.1\nnameserver /example.com/missing\n' > "$work/candidate"
 if awk -v version=46.1 -f "$BASE_DIR/validator.awk" "$BASE_DIR/validator-46.1.txt" "$work/candidate" > "$work/static"; then exit 1;fi
 grep -q '^E' "$work/static"
 echo 'PASS: native preparation isolates ports/files/cache; refuses side effects and unsafe constructs; shares static lexer'
+# Repeated domain-set names represent a union, not a duplicate declaration error.
+printf 'bind :53\nserver 1.1.1.1\ndomain-set -name shared -file /source/one.list\ndomain-set -name shared -file /source/two.list\ndomain-set -name shared -file /source/three.list\nnameserver /domain-set:shared/default\n' > "$work/candidate"
+prepare
+test "$(wc -l < "$work/files")" -eq 3
+test "$(grep -c '^domain-set -name "shared"' "$work/sandbox.conf")" -eq 3
+test "$(grep -c '^ROUTE' "$work/probes")" -eq 3
+for id in 1 2 3;do grep -q "LIST.*$id$" "$work/probes";done
+echo 'PASS: shared domain-set copies and probes every member file'

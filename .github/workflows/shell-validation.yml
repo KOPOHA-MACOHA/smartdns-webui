@@ -27,6 +27,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check change-center.js
+          node --check shell.js
           node --check app.js
           node --check safe-apply.js
           node --check config-review.js
@@ -62,7 +63,9 @@ jobs:
         run: sh tests/validator.test.sh
 
       - name: Test isolated native configuration preparation
-        run: sh tests/preflight-prepare.test.sh
+        run: |
+          sh tests/preflight-prepare.test.sh
+          sh tests/preflight-retry.test.sh
 
       - name: Test guarded application with disposable files and mocked service
         run: |

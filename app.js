@@ -22,6 +22,7 @@ function hasIncompleteConfig() {
         [...document.querySelectorAll('.route-item')].some(item=>!item.querySelector('.route-name').value.trim() || !item.querySelector('.route-group').value || !item.querySelector('.route-file-select') || [...item.querySelectorAll('.route-file-select')].some(el=>!el.value));
 }
 function captureConfigDraft() {
+    refreshVisualEditors();
     if(currentSettingsMode==='raw') return {text:rawEditor?rawEditor.getValue():document.getElementById('raw-config-text').value};
     const root=document.getElementById('config-sections');
     const controls=[...root.querySelectorAll('input,textarea,select')];
@@ -48,6 +49,7 @@ function renderConfigDraft(snapshot) {
     renderingEditor=true;
     try {
         const root=document.getElementById('config-sections');
+        const section=root.querySelector('.settings-subtab-panel.active')?.id.replace('settings-subtab-','');
         if(currentSettingsMode==='ui') {
             if(snapshot.ui) {
                 root.innerHTML=snapshot.ui.html;
@@ -56,7 +58,9 @@ function renderConfigDraft(snapshot) {
                     el.value=state.value;if(state.checked!==null)el.checked=state.checked;
                 });
             } else root.innerHTML=parseConfigToSections(snapshot.text);
-            organizeConfigSections();refreshRouteGroupOptions();
+            organizeConfigSections();
+            if(section)switchConfigSubtab(section);
+            refreshRouteGroupOptions();
             if(typeof refreshRouteFileOptions==='function')refreshRouteFileOptions();
             if(typeof applyDnsGroupCollapseState==='function')applyDnsGroupCollapseState();
             root.querySelectorAll('textarea').forEach(autoResizeTextarea);initSortable();
@@ -74,7 +78,7 @@ function renderCurrentDraft(snapshot) {
         if(snapshot.incomplete&&currentSettingsMode==='raw')setSettingsModeView('ui');
         renderConfigDraft(snapshot);
     } else if(activeTab==='lists') {
-        const el=document.getElementById('list-content');el.value=snapshot.text;el.disabled=!!snapshot.deleted;
+        const el=document.getElementById('list-content');el.value=snapshot.text;el.disabled=!!snapshot.deleted;refreshListPresentation();
     }
     renderChangeCenter();
 }
@@ -92,6 +96,7 @@ async function previewEditorChanges() {
     await window.reviewConfigChanges(before,after,{preview:true,title:doc.label});
 }
 function renderChangeCenter() {
+    refreshVisualEditors();
     const panel=document.getElementById('change-center');if(!panel)return;
     const id=currentDocumentId(),doc=changes.get(id),busy=!!changes.operation;
     const config=activeTab==='settings'&&!!doc;
@@ -100,7 +105,10 @@ function renderChangeCenter() {
     disable('diff-change-btn',busy||!doc||!changes.dirty(id));disable('discard-change-btn',busy||!doc||!changes.dirty(id));
     disable('global-save-btn',busy||!doc||!changes.dirty(id));
     disable('validate-config-btn',busy||!config);disable('preflight-config-btn',busy||!config);
-    disable('restart-service-btn',busy||!config||isTestMode);
+    const applied=config&&doc.applyState==='COMMITTED'&&doc.applied===doc.draft.text&&!doc.draft.incomplete;
+    disable('restart-service-btn',busy||!config||isTestMode||applied);
+    const applyButton=document.getElementById('restart-service-btn');
+    if(applyButton){applyButton.innerHTML=applied?'<i class="bi bi-check2 me-1"></i> Применено':'<i class="bi bi-arrow-repeat me-1"></i> Применить';applyButton.title=applied?'Эта версия конфигурации успешно применена в текущем сеансе.':'Применить конфигурацию с проверкой и откатом';}
     disable('organize-dns-btn',busy||!config);disable('reload-change-btn',busy||!doc);
     const save=document.getElementById('global-save-btn');if(save)save.classList.toggle('btn-primary',!!doc&&changes.dirty(id));
     const status=document.getElementById('change-status');
@@ -116,6 +124,8 @@ function renderChangeCenter() {
             const option=document.createElement('option');option.value=item.id;option.textContent=item.label+(changes.dirty(item.id)?' •':'');select.append(option);
         }select.value=doc?.id||'';select.disabled=busy;
     }
+    const settingsToggle=document.getElementById('settings-toggle');
+    if(settingsToggle){settingsToggle.classList.toggle('has-changes',changes.dirtyCount()>0);settingsToggle.title=changes.dirtyCount()?'Настройки и действия · есть несохранённые правки':'Настройки и действия';}
     const count=document.getElementById('change-count');if(count)count.textContent=changes.dirtyCount()?'Несохранённых файлов: '+changes.dirtyCount():'';
 }
 async function reloadEditorDocument() {
@@ -167,17 +177,41 @@ async function apiCall(action, target = null, body = null, strict = false, revis
 }
 
 // === АВТОРЕСАЙЗ ТЕКСТОВЫХ ПОЛЕЙ ===
+function refreshVisualEditors() {
+    const root=document.getElementById('config-sections');if(!root)return;
+    for(const field of root.querySelectorAll('textarea')) {
+        if(field.id==='core-bind-tcp')continue;
+        let frame=field.closest('.visual-code-editor');
+        if(!frame){frame=document.createElement('div');frame.className='visual-code-editor';field.before(frame);frame.append(field);const paint=document.createElement('pre');paint.className='visual-code-paint';paint.setAttribute('aria-hidden','true');frame.prepend(paint);}
+        const paint=frame.querySelector('.visual-code-paint');paint.replaceChildren();
+        field.value.split('\n').forEach((line,i)=>{if(i)paint.append(document.createTextNode('\n'));const span=document.createElement('span');if(/^\s*#/.test(line))span.className='visual-comment';span.textContent=line||' ';paint.append(span);});
+        field.onscroll=()=>{paint.scrollTop=field.scrollTop;paint.scrollLeft=field.scrollLeft;};
+        paint.scrollTop=field.scrollTop;paint.scrollLeft=field.scrollLeft;
+    }
+    for(const group of root.querySelectorAll('.group-item')) {
+        const field=group.querySelector('.group-dns-list'),summary=group.querySelector('.group-summary');if(!field||!summary)continue;
+        const lines=field.value.split(/\r?\n/).filter(line=>line.trim());const enabled=lines.filter(line=>!/^\s*#/.test(line));
+        const labels={udp4:'UDP',udp6:'UDP',tcp:'TCP',dot:'DoT',doh:'DoH',doq:'DoQ',h3:'HTTP/3'};
+        const protocols=[...new Set(enabled.map(line=>labels[window.parseDnsModalValue(line).type]||'DNS'))];
+        const hosts=[...new Set(enabled.map(line=>window.parseDnsModalValue(line).address))].slice(0,2);
+        summary.textContent=enabled.length+' вкл. · '+(lines.length-enabled.length)+' откл.'+(protocols.length?' · '+protocols.join(', '):'')+(hosts.length?' · '+hosts.join(', '):'');
+        summary.title=enabled.length?'Сводка конфигурации; доступность серверов не проверялась.':'В группе нет включённых DNS-серверов.';
+    }
+}
 function autoResizeTextarea(el) {
-    if (['raw-config-text', 'list-content', 'log-content'].includes(el.id)) return;
-    
-    el.style.overflow = 'hidden'; 
-    el.style.height = 'auto'; 
-    el.style.height = (el.scrollHeight + 2) + 'px'; 
+    if (['raw-config-text','list-content','log-content'].includes(el.id)) return;
+    el.rows=1;
+    el.style.height='auto';
+    const compact=el.id==='core-bind-tcp';
+    el.style.height=Math.min(compact?160:340,Math.max(compact?36:80,el.scrollHeight+2))+'px';
+    el.style.overflow='auto';
+    el.style.resize='none';
+    el.closest('.visual-code-editor')?.style.setProperty('--editor-scrollbar',Math.max(0,el.offsetWidth-el.clientWidth-2)+'px');
 }
 
 document.addEventListener('input', (e) => {
     if (e.target && e.target.tagName === 'TEXTAREA') {
-        autoResizeTextarea(e.target);
+        autoResizeTextarea(e.target);refreshVisualEditors();
     }
 });
 
@@ -193,6 +227,7 @@ function switchConfigSubtab(id, clicked) {
         activePanel?.querySelectorAll('textarea').forEach(autoResizeTextarea);
     }, 0);
     try { localStorage.setItem('smartdns-ui-active-subtab', id); } catch (_) {}
+    window.syncShellNavigation?.('settings',id);
 }
 window.switchConfigSubtab = switchConfigSubtab;
 
@@ -221,11 +256,12 @@ function organizeConfigSections() {
         panel.setAttribute('aria-label',label);
         panels[id] = panel;
     });
+    const coreColumns = ['core-options-column','core-dns-column'].map(name=>{const col=document.createElement('div');col.className=name;panels.core.append(col);return col;});
     cards.forEach(card => {
         let target = 'routing';
         if (card.querySelector('#core-bind, #sec-bootstrap, #sec-upstream, #sec-fallback, #sec-logging-select')) target = 'core';
         else if (card.querySelector('#dynamic-groups-container')) target = 'groups';
-        panels[target].appendChild(card);
+        if(target==='core')coreColumns[card.querySelector('#core-bind,#sec-logging-select')?0:1].append(card);else panels[target].appendChild(card);
     });
     row.remove();
     const sourceRecord = root.querySelector('#config-source-record');
@@ -319,7 +355,7 @@ function switchSettingsMode(mode) {
         }
         
         rawEditor.setValue(configText);
-        setTimeout(() => rawEditor.refresh(), 10);
+        setTimeout(() => {window.fitEditorPanes?.();rawEditor.refresh();}, 10);
 
     } else {
         const rawContent = rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value;
@@ -377,6 +413,7 @@ if (tabId === 'settings') {
         await loadLog();
     }
     changes.activate(currentDocumentId());renderChangeCenter();
+    window.syncShellNavigation?.(tabId);
 }
 
 window.addEventListener('popstate', (e) => {
@@ -608,7 +645,7 @@ async function selectList(name) {
         const draft=changes.get(listDocumentId())?.draft;
         ta.value=draft?.text||'';ta.disabled=!draft||!!draft.deleted;
         changes.activate(currentDocumentId());alert(error.message);
-    } finally {changes.end();}
+    } finally {changes.end();refreshListPresentation();window.fitEditorPanes?.();}
 }
 
 async function createList() {
@@ -634,9 +671,100 @@ async function deleteList(name=activeList) {
     renderCurrentDraft(changes.get().draft);
 }
 
-async function loadLog() {
-    document.getElementById('log-content').value = await apiCall('get_log');
+function analyzeDomainList(text) {
+    const lines=text.split('\n'),keys=lines.map(line=>{const value=line.trim();return value&&!value.startsWith('#')?value.toLowerCase().replace(/\.$/,''):'';});
+    const counts=new Map();for(const key of keys)if(key)counts.set(key,(counts.get(key)||0)+1);
+    const duplicates=keys.map(key=>!!key&&counts.get(key)>1);
+    const domains=keys.filter(Boolean).length;
+    return {lines,duplicates,domains,extra:domains-counts.size};
 }
+function syncListGutter() {
+    const editor=document.getElementById('list-content'),gutter=document.getElementById('list-line-numbers'),paint=document.getElementById('list-paint');
+    if(gutter)gutter.scrollTop=editor.scrollTop;
+    if(paint){paint.scrollTop=editor.scrollTop;paint.scrollLeft=editor.scrollLeft;}
+}
+function refreshListPresentation() {
+    const editor=document.getElementById('list-content');if(!editor)return;
+    const analysis=analyzeDomainList(editor.value),{lines,duplicates,domains,extra}=analysis;
+    for(const [id,numbers] of [['list-line-numbers',true],['list-paint',false]]) {
+        const element=document.getElementById(id);if(!element)continue;element.replaceChildren();
+        lines.forEach((line,i)=>{if(i)element.append(document.createTextNode('\n'));const span=document.createElement('span');
+            if(duplicates[i]){span.className='domain-duplicate';span.title='Домен повторяется в этом файле';}
+            else if(/^\s*#/.test(line))span.className='visual-comment';
+            span.textContent=numbers?i+1:line||' ';element.append(span);
+        });
+    }
+    const stats=document.getElementById('list-stats');if(stats)stats.textContent='Домены: '+domains+' · строки: '+lines.length+(extra?' · повторов: '+extra:'');
+    const next=document.getElementById('list-next-duplicate');if(next)next.hidden=!extra;
+    syncListGutter();
+    if(document.getElementById('list-search')?.value)findListText();
+}
+function nextListDuplicate() {
+    const editor=document.getElementById('list-content'),analysis=analyzeDomainList(editor.value),matches=[];let offset=0;
+    analysis.lines.forEach((line,i)=>{if(analysis.duplicates[i])matches.push({start:offset,end:offset+line.length,line:i});offset+=line.length+1;});
+    const match=matches.find(item=>item.start>=editor.selectionEnd)||matches[0];if(!match)return;
+    editor.focus();editor.setSelectionRange(match.start,match.end);
+    const lineHeight=parseFloat(getComputedStyle(editor).lineHeight)||22.4;
+    editor.scrollTop=Math.max(0,match.line*lineHeight-editor.clientHeight/2);syncListGutter();
+}
+function findListText(next=false) {
+    const editor=document.getElementById('list-content'),query=document.getElementById('list-search').value.toLocaleLowerCase();
+    const status=document.getElementById('list-search-status');
+    if(!query){status.textContent='';return;}
+    const text=editor.value.toLocaleLowerCase(),matches=[];
+    for(let index=text.indexOf(query);index!==-1;index=text.indexOf(query,index+query.length))matches.push(index);
+    if(!matches.length){status.textContent='Не найдено';return;}
+    const start=next?editor.selectionEnd:0;
+    const index=matches.find(pos=>pos>=start)??matches[0];
+    editor.setSelectionRange(index,index+query.length);
+    const line=editor.value.slice(0,index).split('\n').length-1;
+    const lineHeight=parseFloat(getComputedStyle(editor).lineHeight)||22.4;
+    editor.scrollTop=Math.max(0,line*lineHeight-editor.clientHeight/2);syncListGutter();
+    status.textContent=(matches.indexOf(index)+1)+' из '+matches.length;
+    if(next)editor.focus();
+}
+function parseLogLine(line) {
+    const match=line.match(/^\[([^\]]+)\]\s*\[\s*(FATAL|ERROR|WARN(?:ING)?|INFO|DEBUG|VERBOSE)\s*\]\s*([\s\S]*)$/i);
+    if(!match)return {time:'—',level:'OTHER',message:line};
+    let level=match[2].toUpperCase();if(level==='WARNING')level='WARN';if(level==='FATAL')level='ERROR';
+    return {time:match[1],level,message:match[3]};
+}
+let logLoadedAt='';
+let logPage=0;
+const logPageSize=250;
+function changeLogPage(delta){logPage=Math.max(0,logPage+delta);renderLogView();document.getElementById('log-view').scrollTop=0;}
+function renderLogView(resetPage=false) {
+    if(resetPage)logPage=0;
+    const raw=document.getElementById('log-content'),view=document.getElementById('log-view');if(!view)return;
+    const lines=raw.value.split(/\r?\n/).filter(line=>line.length),entries=lines.map(parseLogLine);
+    const search=document.getElementById('log-search').value.toLocaleLowerCase(),level=document.getElementById('log-level-filter').value;
+    const filtered=entries.filter(item=>(level==='all'||(level==='problems'?['ERROR','WARN'].includes(item.level):item.level===level))&&(!search||(item.time+' '+item.level+' '+item.message).toLocaleLowerCase().includes(search)));
+    const isRaw=document.getElementById('log-raw-toggle').checked;
+    view.hidden=isRaw;raw.hidden=!isRaw;
+    document.getElementById('log-search').disabled=isRaw;document.getElementById('log-level-filter').disabled=isRaw;
+    const errors=entries.filter(item=>item.level==='ERROR').length,warnings=entries.filter(item=>item.level==='WARN').length;
+    document.getElementById('log-summary').textContent=(isRaw?'Исходных строк: '+entries.length:'Найдено '+filtered.length+' из '+entries.length)+' · ошибок: '+errors+' · предупреждений: '+warnings+(logLoadedAt?' · обновлено '+logLoadedAt:'')+' · снимок журнала';
+    const pages=Math.max(1,Math.ceil(filtered.length/logPageSize));logPage=Math.min(logPage,pages-1);
+    document.getElementById('log-newer').disabled=isRaw||logPage===0;document.getElementById('log-older').disabled=isRaw||logPage>=pages-1;
+    document.getElementById('log-page-status').textContent=isRaw?'':(logPage+1)+' / '+pages+' · новые сверху';
+    const visible=filtered.slice().reverse().slice(logPage*logPageSize,(logPage+1)*logPageSize);
+    view.replaceChildren();
+    if(!filtered.length){const empty=document.createElement('p');empty.className='log-empty';empty.textContent=entries.length?'Нет событий по выбранным условиям.':'Журнал пуст.';view.append(empty);window.fitEditorPanes?.();return;}
+    const table=document.createElement('table');table.className='log-table';
+    const head=document.createElement('thead'),heading=document.createElement('tr');
+    for(const title of ['Время','Уровень','Сообщение']){const th=document.createElement('th');th.scope='col';th.textContent=title;heading.append(th);}head.append(heading);table.append(head);
+    const body=document.createElement('tbody');
+    for(const item of visible){const row=document.createElement('tr');row.className='log-'+item.level.toLowerCase();
+        for(const [cls,value] of [['log-time',item.time],['log-level',item.level==='OTHER'?'—':item.level],['log-message',item.message]]){const cell=document.createElement('td');cell.className=cls;cell.textContent=value;row.append(cell);}body.append(row);
+    }
+    table.append(body);view.append(table);window.fitEditorPanes?.();
+}
+async function loadLog() {
+    const summary=document.getElementById('log-summary');if(summary)summary.textContent='Загрузка журнала…';
+    try {document.getElementById('log-content').value=await apiCall('get_log',null,null,true);logLoadedAt=new Date().toLocaleTimeString('ru-RU');renderLogView(true);}
+    catch(error){if(summary)summary.textContent='Не удалось обновить журнал: '+error.message;}
+}
+
 
 document.addEventListener('keydown', (e) => {
     if(e.defaultPrevented || e.target.closest?.('dialog'))return;
