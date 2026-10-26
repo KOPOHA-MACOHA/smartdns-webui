@@ -50,6 +50,11 @@
         const fit = () => {
             for (const el of document.querySelectorAll('#settings-raw-view .CodeMirror,#raw-config-text,.list-editor-frame,#log-view,#log-content')) {
                 if (!el.getClientRects().length) continue;
+                // Phones scroll the page to a full-height list/log pane; desktop panes fit below the toolbar.
+                if (window.matchMedia('(max-width: 767.98px), (max-width: 1000px) and (max-height: 500px)').matches && el.matches('.list-editor-frame,#log-view,#log-content')) {
+                    el.style.removeProperty('height');
+                    continue;
+                }
                 const height = Math.max(240,window.innerHeight - el.getBoundingClientRect().top - 16);
                 const value = height + 'px';
                 if (el.style.height !== value) el.style.height = value;

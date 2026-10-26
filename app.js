@@ -571,6 +571,16 @@ async function restartService() {
     }
 }
 
+function toggleListCreation() {
+    const bar=document.querySelector('.list-tabs-bar'),button=document.getElementById('list-create-toggle');
+    const open=bar.classList.toggle('is-creating');button.setAttribute('aria-expanded',String(open));
+    if(open)document.getElementById('new-list-name').focus();else button.focus();
+}
+function syncMobileListControls() {
+    const select=document.getElementById('mobile-list-select');
+    select.value=activeList;select.disabled=!select.options.length||!!changes.operation;
+    document.getElementById('mobile-list-delete').disabled=!activeList||document.getElementById('list-content').disabled||!!changes.operation;
+}
 async function loadLists() {
     const mode=isTestMode;
     const listsRaw = await apiCall('get_lists');
@@ -579,6 +589,9 @@ async function loadLists() {
     for(const doc of changes.documents.values())if(doc.kind==='list'&&doc.id.startsWith('list:'+(isTestMode?'test:':'live:'))&&(!doc.saved.deleted||!doc.draft.deleted)&&!lists.includes(doc.label))lists.push(doc.label);
     const container = document.getElementById('lists-container');
     container.replaceChildren();
+    const mobileSelect=document.getElementById('mobile-list-select');mobileSelect.replaceChildren();
+    for(const name of lists){const option=document.createElement('option');option.value=name;option.textContent=name;mobileSelect.append(option);}
+    syncMobileListControls();
 
     lists.forEach(name => {
         const item = document.createElement('div');
@@ -622,7 +635,7 @@ async function loadLists() {
 }
 
 async function selectList(name) {
-    if(changes.operation)return;
+    if(changes.operation){syncMobileListControls();return;}
     trackEditorChange();changes.boundary();
     const previous=activeList;
     activeList=name;
@@ -662,6 +675,8 @@ async function createList() {
     changes.open(id,{text:'',deleted:true},{label:name,kind:'list'});
     changes.change(id,{text:''});
     input.value='';await loadLists();await selectList(name);
+    document.querySelector('.list-tabs-bar').classList.remove('is-creating');
+    document.getElementById('list-create-toggle').setAttribute('aria-expanded','false');
 }
 async function deleteList(name=activeList) {
     if(changes.operation||!name)return;
@@ -685,6 +700,7 @@ function syncListGutter() {
 }
 function refreshListPresentation() {
     const editor=document.getElementById('list-content');if(!editor)return;
+    syncMobileListControls();
     const analysis=analyzeDomainList(editor.value),{lines,duplicates,domains,extra}=analysis;
     for(const [id,numbers] of [['list-line-numbers',true],['list-paint',false]]) {
         const element=document.getElementById(id);if(!element)continue;element.replaceChildren();
