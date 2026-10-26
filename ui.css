@@ -319,3 +319,34 @@ body:has(#action-panel:not([hidden])) { overflow:hidden; }
 }
 #config-sections #core-bind,#config-sections #core-bind-tcp { font:inherit!important; font-size:14px!important; line-height:1.5!important; letter-spacing:normal!important; padding:6px 12px!important; }
 #config-sections #core-bind-tcp { min-height:36px; height:36px; max-height:160px; resize:none; overflow:auto; }
+
+/* Mobile editors have their own viewport of space after the page toolbar scrolls away. */
+.mobile-list-controls { display:none; }
+@media(max-width:767.98px), (max-width:1000px) and (max-height:500px) {
+ .list-tabs-bar { display:block; padding-bottom:10px; }
+ #lists-container { display:none; }
+ .mobile-list-controls { display:grid; grid-template-columns:minmax(0,1fr) 42px 42px; align-items:center; gap:8px; }
+ .mobile-list-controls .form-select { width:100%; min-width:0; }
+ .mobile-list-controls .btn { min-height:42px; padding:6px; }
+ .list-tabs-bar .new-list-control { display:none; margin-top:10px; }
+ .list-tabs-bar.is-creating .new-list-control { display:flex; }
+ #tab-lists .editor-toolbar { gap:8px; }
+ #tab-lists .editor-toolbar .editor-search { order:-1; flex-basis:100%; min-width:0; }
+ #tab-lists #current-list-title { display:none; }
+ #tab-lists #list-stats { flex:1; min-width:0; }
+ #tab-lists #list-search-status { flex-basis:100%; }
+ .editor-search .form-control { width:100%; min-width:0; }
+ .list-editor-frame,.log-view,#log-content { height:max(280px,calc(100svh - var(--topbar-height) - 16px)); }
+ .log-toolbar { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:center; }
+ .log-toolbar .editor-search,.log-toolbar #log-level-filter,.log-toolbar .form-check { grid-column:1/-1; width:100%; min-width:0; }
+ .log-toolbar #log-level-filter { flex:none; }
+ .log-toolbar .btn { min-height:42px; }
+ .log-pagination { width:100%; justify-content:space-between; gap:6px; }
+ .log-pagination .btn { min-height:40px; }
+ .log-table,.log-table tbody { display:block; }
+ .log-table thead { display:none; }
+ .log-table tr { display:grid; grid-template-columns:minmax(0,1fr) auto; padding:8px; border-bottom:1px solid var(--line); }
+ .log-table td { border:0; padding:2px 0; }
+ .log-table .log-time { min-width:0; white-space:normal; }
+ .log-table .log-message { grid-column:1/-1; min-width:0; overflow-wrap:anywhere; }
+}

@@ -12,7 +12,7 @@
     <!-- ДОБАВЛЕНО ДЛЯ ПОДСВЕТКИ СИНТАКСИСА -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/dracula.min.css">
-    <link rel="stylesheet" href="ui.css?v=6">
+    <link rel="stylesheet" href="ui.css?v=7">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
@@ -57,7 +57,7 @@
             </div>
 
             <div id="tab-lists" class="tab-content">
-<div class="list-tabs-bar"><div id="lists-container" class="list-group" aria-label="Файлы списков"></div><div class="input-group new-list-control"><input type="text" id="new-list-name" class="form-control" placeholder="Новый список" aria-label="Имя нового списка"><button class="btn btn-outline-info" onclick="createList()" aria-label="Создать список"><i class="bi bi-plus-lg"></i></button></div></div>
+<div class="list-tabs-bar"><div class="mobile-list-controls"><select id="mobile-list-select" class="form-select" aria-label="Выбрать список доменов" onchange="selectList(this.value)"></select><button id="mobile-list-delete" class="btn btn-outline-danger" type="button" onclick="deleteList()" aria-label="Удалить выбранный список" disabled><i class="bi bi-trash"></i></button><button id="list-create-toggle" class="btn btn-outline-info" type="button" onclick="toggleListCreation()" aria-label="Новый список" aria-expanded="false" aria-controls="new-list-control"><i class="bi bi-plus-lg"></i></button></div><div id="lists-container" class="list-group" aria-label="Файлы списков"></div><div id="new-list-control" class="input-group new-list-control"><input type="text" id="new-list-name" class="form-control" placeholder="Новый список" aria-label="Имя нового списка"><button class="btn btn-outline-info" onclick="createList()" aria-label="Создать список"><i class="bi bi-plus-lg"></i></button></div></div>
 <div class="editor-toolbar"><span id="current-list-title">Выберите список</span><span id="list-stats" class="text-muted" role="status"></span><button id="list-next-duplicate" class="btn btn-sm btn-outline-secondary" hidden onclick="nextListDuplicate()">Следующий повтор</button><label class="editor-search"><i class="bi bi-search" aria-hidden="true"></i><input id="list-search" class="form-control" type="search" placeholder="Найти домен" aria-label="Найти в списке" oninput="findListText()" onkeydown="if(event.key==='Enter'){event.preventDefault();findListText(true)}"></label><span id="list-search-status" class="text-muted" role="status"></span></div>
 <div class="list-editor-frame"><pre id="list-line-numbers" aria-hidden="true">1</pre><div class="list-code-surface"><pre id="list-paint" aria-hidden="true"></pre><textarea id="list-content" class="form-control code-font" spellcheck="false" wrap="off" disabled aria-label="Содержимое списка доменов" oninput="markListDirty(event);refreshListPresentation()" onscroll="syncListGutter()"></textarea></div></div>
 </div>
@@ -134,7 +134,7 @@
 <script src="config-review.js?v=6"></script>
 <script src="safe-apply.js?v=3"></script>
 <script src="change-center.js?v=1"></script>
-<script src="shell.js?v=3"></script>
-<script src="app.js?v=33"></script>
+<script src="shell.js?v=4"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>

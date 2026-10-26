@@ -191,3 +191,17 @@ test('simple bind keeps unequal, additional, flagged or invalid listeners in adv
   for(const [udp,tcp,extra] of [['192.168.1.1:6053',['192.168.1.2:6053'],''],['192.168.1.1:6053',['192.168.1.1:6053','127.0.0.1:6053'],''],['192.168.1.1:6053 -no-cache',['192.168.1.1:6053 -no-cache'],''],['192.168.1.1:6053',['192.168.1.1:6053'],'bind :5353'],['999.168.1.1:6053',['999.168.1.1:6053'],''],['[bad::ip]:6053',['[bad::ip]:6053'],''],['192.168.1.1:65536',['192.168.1.1:65536'],'']])assert.equal(w.simpleDnsBind(udp,tcp,extra),null);
  }finally{e.close()}
 });
+
+
+test('mobile file picker shares drafts and undo, and creation controls do not write files',async()=>{
+ const e=await editor(config,true),{w}=e;try{
+  await w.switchTab('lists',null,false);let picker=w.document.getElementById('mobile-list-select');assert.equal(picker.value,'a.list');assert(!picker.disabled);
+  w.toggleListCreation();assert.equal(w.document.getElementById('list-create-toggle').getAttribute('aria-expanded'),'true');assert.equal(w.document.activeElement.id,'new-list-name');w.toggleListCreation();assert.equal(w.document.activeElement.id,'list-create-toggle');
+  const field=w.document.getElementById('list-content');field.value='alpha draft\n';field.dispatchEvent(new w.Event('input',{bubbles:true}));
+  picker.value='b.list';picker.dispatchEvent(new w.Event('change',{bubbles:true}));await e.settle();assert.equal(field.value,'beta\n');assert.equal(picker.value,'b.list');
+  picker.value='a.list';picker.dispatchEvent(new w.Event('change',{bubbles:true}));await e.settle();assert.equal(field.value,'alpha draft\n');w.undoEditorChange();assert.equal(field.value,'alpha\n');
+  w.document.getElementById('mobile-list-delete').click();await e.settle();assert(field.disabled);assert(w.document.getElementById('mobile-list-delete').disabled);w.undoEditorChange();assert(!field.disabled);assert(!w.document.getElementById('mobile-list-delete').disabled);
+  w.toggleListCreation();w.document.getElementById('new-list-name').value='mobile';await w.createList();assert.equal(picker.value,'mobile.list');assert(!w.document.querySelector('.list-tabs-bar').classList.contains('is-creating'));assert.equal(w.document.getElementById('list-create-toggle').getAttribute('aria-expanded'),'false');
+  assert(!e.calls.some(call=>['save_list','delete_list'].includes(call.action)));
+ }finally{e.close()}
+});
