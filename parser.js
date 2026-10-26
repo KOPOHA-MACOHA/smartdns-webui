@@ -265,7 +265,7 @@ const UI = {
 
         ${[['force-aaaa-soa','Блокировать IPv6-ответы (force-AAAA-SOA)',data.force_aaaa_soa],['cache-persist','Сохранять кэш на диск',data.cache_persist]].map(([id,label,value]) => `<div class="row mb-3"><div class="col-sm-6"><label class="form-label small" for="core-${id}">${label}</label></div><div class="col-sm-6"><select id="core-${id}" class="form-select form-select-sm" onchange="markConfigDirty(event)">${[['','Не задано (наследовать)'],['yes','Да'],['no','Нет'],...(['','yes','no'].includes(value)?[]:[[value,value+' (проверьте значение)']])].map(([v,text])=>`<option value="${UI.escape(v)}" ${v===value?'selected':''}>${UI.escape(text)}</option>`).join('')}</select></div></div>`).join('')}`
 };
-UI.bindPortField = data => `<div class="dns-bind-port"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" ${data.show_simple_bind?'':'disabled'} class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty(event)"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div></div></div><button id="dns-bind-toggle" type="button" class="btn btn-sm btn-outline-info bind-mode-toggle mb-3" aria-expanded="${data.show_simple_bind?'false':'true'}" onclick="this.getAttribute('aria-expanded')==='true'?useSimplifiedDnsBind():useAdvancedDnsBind()"><i class="bi bi-sliders" aria-hidden="true"></i><span>${data.show_simple_bind?'Расширенные настройки адресов':'Скрыть расширенные настройки'}</span></button><div class="small text-muted mb-2" id="dns-bind-mode-hint" role="status"></div></div>`;
+UI.bindPortField = data => `<div class="dns-bind-port"><div class="row mb-3 align-items-center"><div class="col-sm-6"><label class="form-label small" for="core-dns-port">Порт DNS (UDP и TCP)</label></div><div class="col-sm-6"><input type="number" min="1" max="65535" step="1" id="core-dns-port" ${data.show_simple_bind?'':'disabled'} class="form-control form-control-sm" value="${UI.escape(data.simple_bind?.port || '')}" data-simple="${data.show_simple_bind?'yes':'no'}" data-prefix="${UI.escape(data.simple_bind?.prefix || '')}" oninput="markConfigDirty(event)"><div class="small text-muted mt-1">Принимать запросы по UDP и TCP</div><div id="dns-bind-listen-hint" class="small text-muted mt-1" ${data.show_simple_bind?'':'hidden'}>${UI.escape(dnsBindListenHint(data.simple_bind?.prefix))}</div></div></div><button id="dns-bind-toggle" type="button" class="btn btn-sm btn-outline-info bind-mode-toggle mb-3" aria-expanded="${data.show_simple_bind?'false':'true'}" onclick="this.getAttribute('aria-expanded')==='true'?useSimplifiedDnsBind():useAdvancedDnsBind()"><i class="bi bi-sliders" aria-hidden="true"></i><span>${data.show_simple_bind?'Расширенные настройки адресов':'Скрыть расширенные настройки'}</span></button><div class="small text-muted mb-2" id="dns-bind-mode-hint" role="status"></div></div>`;
 
 function useAdvancedDnsBind() {
     const port = document.getElementById('core-dns-port');
@@ -276,6 +276,7 @@ function useAdvancedDnsBind() {
         port.dataset.simple = 'no';
     }
     port.disabled=true;
+    document.getElementById('dns-bind-listen-hint').hidden=true;
     updateBindToggle(true);
     document.querySelectorAll('.dns-bind-advanced').forEach(el=>el.classList.remove('d-none'));
     if(typeof autoResizeTextarea==='function')autoResizeTextarea(document.getElementById('core-bind-tcp'));
@@ -290,8 +291,16 @@ function updateBindToggle(advanced) {
 function saveDnsBindMode(mode) {
     try { localStorage.setItem('smartdns-ui-bind-mode',mode); } catch (_) {}
 }
+function dnsBindListenHint(prefix) {
+    return 'Адрес прослушивания SmartDNS: ' + (prefix || 'все IPv4-адреса') + '. Меняется в расширенных настройках.';
+}
 function simpleDnsBind(bind, tcp, others) {
-    const match = bind.match(/^(\[::\]|\[::1\]|127\.0\.0\.1|0\.0\.0\.0|):(\d+)$/);
+    const match = bind.match(/^(\[[0-9a-fA-F:.]+\]|(?:\d{1,3}\.){3}\d{1,3}|):(\d+)$/);
+    if (match && match[1]) {
+        if (match[1].startsWith('[')) {
+            try { new URL('http://' + match[1]); } catch (_) { return null; }
+        } else if (match[1].split('.').some(part=>+part>255)) return null;
+    }
     const extra = others.split(/\r?\n/).some(line=>/^\s*bind(?:-tcp)?\s/.test(line));
     return match && !extra && tcp.length===1 && tcp[0]===bind && +match[2]>=1 && +match[2]<=65535
         ? {prefix:match[1],port:match[2]} : null;
@@ -301,12 +310,14 @@ function useSimplifiedDnsBind() {
     const tcp = document.getElementById('core-bind-tcp').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     const simple = simpleDnsBind(bind,tcp,document.getElementById('sec-core-others').value);
     if (!simple) {
-        document.getElementById('dns-bind-mode-hint').textContent='Нельзя объединить текущие адреса: нужны одна одинаковая пара UDP/TCP без аргументов и без дополнительных bind. Настройки сохранены.';
+        document.getElementById('dns-bind-mode-hint').textContent='Нельзя объединить текущие адреса: нужны одна одинаковая пара UDP/TCP без аргументов и без дополнительных bind. Адреса не изменены.';
         return false;
     }
     const port = document.getElementById('core-dns-port');
     port.value=simple.port; port.dataset.prefix=simple.prefix; port.dataset.simple='yes';
     port.disabled=false;
+    const hint=document.getElementById('dns-bind-listen-hint');
+    hint.textContent=dnsBindListenHint(simple.prefix); hint.hidden=false;
     updateBindToggle(false);
     document.querySelectorAll('.dns-bind-advanced').forEach(el=>el.classList.add('d-none'));
     saveDnsBindMode('simple');

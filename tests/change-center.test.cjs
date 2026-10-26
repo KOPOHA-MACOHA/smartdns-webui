@@ -170,3 +170,24 @@ test('advanced TCP addresses use a compact plain field and preserve multiple lis
   w.useAdvancedDnsBind();const tcp=w.document.getElementById('core-bind-tcp');assert(!tcp.closest('.visual-code-editor'));assert(!tcp.classList.contains('code-font'));assert.equal(tcp.rows,1);assert.equal(tcp.style.height,'36px');assert.equal(tcp.value,'[::]:53\n127.0.0.1:5353');assert.equal(w.gatherSectionsText(),fixture);assert(!e.state().dirty());
  }finally{e.close()}
 });
+
+
+test('simple DNS bind accepts equal LAN and IPv6 listeners without widening their address',async()=>{
+ for(const prefix of ['192.168.1.1','10.0.0.1','[fd12::1]','[::ffff:192.0.2.1]','[::]','']){
+  const pair=prefix+':6053',fixture=config.replace('bind :53','bind '+pair).replace('bind-tcp :53','bind-tcp '+pair),e=await editor(fixture),{w}=e;
+  try{
+   w.useAdvancedDnsBind();assert.equal(w.useSimplifiedDnsBind(),true,pair);
+   let port=w.document.getElementById('core-dns-port');assert(!port.disabled);assert.equal(port.value,'6053');assert.equal(port.dataset.prefix,prefix);
+   assert.equal(w.gatherSectionsText(),fixture);assert(!e.state().dirty());
+   assert(w.document.getElementById('dns-bind-listen-hint').textContent.includes(prefix||'все IPv4-адреса'));
+   port.value='6054';port.dispatchEvent(new w.Event('input',{bubbles:true}));const changed=w.gatherSectionsText();assert(changed.includes('bind '+prefix+':6054\n'));assert(changed.includes('bind-tcp '+prefix+':6054\n'));
+   w.undoEditorChange();assert.equal(w.gatherSectionsText(),fixture);assert(!e.state().dirty());
+   w.useAdvancedDnsBind();assert.equal(w.document.getElementById('core-bind').value,pair);assert.equal(w.document.getElementById('core-bind-tcp').value,pair);
+  }finally{e.close()}
+ }
+});
+test('simple bind keeps unequal, additional, flagged or invalid listeners in advanced mode',async()=>{
+ const e=await editor();const {w}=e;try{
+  for(const [udp,tcp,extra] of [['192.168.1.1:6053',['192.168.1.2:6053'],''],['192.168.1.1:6053',['192.168.1.1:6053','127.0.0.1:6053'],''],['192.168.1.1:6053 -no-cache',['192.168.1.1:6053 -no-cache'],''],['192.168.1.1:6053',['192.168.1.1:6053'],'bind :5353'],['999.168.1.1:6053',['999.168.1.1:6053'],''],['[bad::ip]:6053',['[bad::ip]:6053'],''],['192.168.1.1:65536',['192.168.1.1:65536'],'']])assert.equal(w.simpleDnsBind(udp,tcp,extra),null);
+ }finally{e.close()}
+});
