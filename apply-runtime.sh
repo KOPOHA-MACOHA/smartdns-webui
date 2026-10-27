@@ -49,25 +49,29 @@ apply_health() (
     snapshot=candidate
     [ "$health_config" != "$tx/before.conf" ] || snapshot=before
     [ "$(sha256sum "$CONF_FILE" | awk '{print $1}')" != "$(cat "$tx/before.sha")" ] || snapshot=before
-    printf 'UDP\texample.org\tA\n' > "$tx/health-queries"
+    # The plan pins each probe to the actual listener, never to a DNS forwarder
+    # which might return a cached answer while SmartDNS itself is unavailable.
+    awk -F '\t' '$1=="LISTEN" {print $2 "\t" $3 "\t" $4 "\texample.org\tA"}' "$tx/$snapshot.plan" > "$tx/health-queries"
+    [ -s "$tx/health-queries" ] || exit 1
     # Named group reachability is tested in preflight. Live probes exercise the
     # actual nameserver routes rather than bypassing them with extra listeners.
-    awk -F '\t' '$1=="ROUTE" {print "UDP\t" $4 "\tANY"}' "$tx/$snapshot.queries" >> "$tx/health-queries"
-    cat "$tx/$snapshot.plan" >> "$tx/health-queries"
+    # Prefer a UDP listener for route/static checks, or TCP in TCP-only configs.
+    endpoint=$(awk -F '\t' '$1=="LISTEN" {if(!first)first=$2 "\t" $3 "\t" $4;if($2=="UDP"){print $2 "\t" $3 "\t" $4;found=1;exit}} END{if(!found)print first}' "$tx/$snapshot.plan")
+    awk -F '\t' -v endpoint="$endpoint" '$1=="ROUTE" {print endpoint "\t" $4 "\tANY"}' "$tx/$snapshot.queries" >> "$tx/health-queries"
+    awk -F '\t' -v endpoint="$endpoint" '$1=="ADDRESS" {print endpoint "\t" $2 "\t" $3}' "$tx/$snapshot.plan" >> "$tx/health-queries"
     start=$(date +%s)
     tab=$(printf '\t')
-    while IFS="$tab" read -r kind domain expected; do
+    while IFS="$tab" read -r kind resolver port domain expected; do
         [ "$(( $(date +%s) - start ))" -lt 25 ] || exit 1
         apply_identity || exit 1
-        transport=+notcp;resolver=127.0.0.1
-        case "$kind" in TCP|TCP6) transport=+tcp ;; esac
-        case "$kind" in UDP6|TCP6) resolver=::1 ;; esac
-        /opt/bin/timeout -k 1 3 /opt/bin/dig "@$resolver" -p 53 "$domain" A "$transport" +time=2 +tries=1 +noall +comments +answer > "$tx/answer" 2>&1 || exit 1
+        transport=+notcp
+        case "$kind" in TCP) transport=+tcp ;; UDP) ;; *) exit 1 ;; esac
+        /opt/bin/timeout -k 1 3 /opt/bin/dig "@$resolver" -p "$port" "$domain" A "$transport" +time=2 +tries=1 +noall +comments +answer > "$tx/answer" 2>&1 || exit 1
         cat "$tx/answer"
         if [ "$expected" = ANY ]; then grep -q -E 'status: (NOERROR|NXDOMAIN)' "$tx/answer" || exit 1
         else
             grep -q 'status: NOERROR' "$tx/answer" && grep -q '[[:space:]]A[[:space:]]' "$tx/answer" || exit 1
-            if [ "$kind" = ADDRESS ]; then
+            if [ "$expected" != A ]; then
                 awk -v ips="$expected" 'BEGIN{n=split(ips,a,",");for(i=1;i<=n;i++)ok[a[i]]=1} $4=="A" && ($5 in ok){found=1} END{exit !found}' "$tx/answer" || exit 1
             fi
         fi
