@@ -739,6 +739,54 @@ function findListText(next=false) {
     status.textContent=(matches.indexOf(index)+1)+' из '+matches.length;
     if(next)editor.focus();
 }
+// Client names are a current Keenetic snapshot, never a historical identity claim.
+let logClientDirectory=new Map();
+let logClientsAvailable=false;
+function normalizeClientIp(value) {
+    const ip=String(value||'').trim().replace(/%[^%]+$/,'');
+    if(/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip))return ip.split('.').every(n=>+n<=255)?ip.split('.').map(Number).join('.'):'';
+    if(!ip.includes(':')||!/^[0-9a-f:.]+$/i.test(ip))return '';
+    try{return new URL('http://['+ip+']/').hostname.replace(/^\[|\]$/g,'').toLowerCase();}catch(_){return '';}
+}
+function buildLogClientDirectory(data) {
+    const claims=new Map(),hosts=new Map();
+    const add=(address,device,rank)=>{
+        const ip=normalizeClientIp(address);if(!ip)return;
+        const old=claims.get(ip);
+        if(!old||rank>old.rank)claims.set(ip,{device,rank});
+        else if(rank===old.rank&&old.device?.id!==device.id)old.device=null;
+    };
+    for(const host of Array.isArray(data?.hotspot?.host)?data.hotspot.host:[]){
+        const mac=String(host.mac||'').toLowerCase();if(!/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac))continue;
+        const device={id:'device:'+mac,name:String(host.name||host.hostname||mac),ip:normalizeClientIp(host.ip)};
+        hosts.set(mac,device);const rank=host.active?2:1;
+        add(host.ip,device,rank);
+        for(const ip of Array.isArray(host.ip6)?host.ip6:[])add(ip,device,rank);
+    }
+    for(const neighbor of Array.isArray(data?.neighbors)?data.neighbors:[]){
+        const device=hosts.get(String(neighbor.mac||'').toLowerCase());if(device)add(neighbor.ip,device,3);
+    }
+    for(const ip of Array.isArray(data?.router)?data.router:[])add(ip,{id:'router',name:'Роутер',ip:''},4);
+    return new Map([...claims].filter(([,claim])=>claim.device).map(([ip,claim])=>[ip,claim.device]));
+}
+function getLogClient(message) {
+    const address=message.match(/\bclient:\s*([^,\s]+)/)?.[1]||'';
+    if(!address)return null;
+    const ip=normalizeClientIp(address)||address,device=logClientDirectory.get(ip);
+    return {id:device?.id||'ip:'+ip,name:device?.name||'',ip};
+}
+function updateLogClientFilter(entries) {
+    const select=document.getElementById('log-client-filter');if(!select)return;
+    const selected=select.value||'all',clients=new Map();
+    for(const item of entries)if(item.client&&!clients.has(item.client.id))clients.set(item.client.id,item.client);
+    // Preserve a selected device even if the next log snapshot contains no requests from it.
+    const previous=[...select.options].find(option=>option.value===selected);
+    select.replaceChildren(new Option('Все клиенты','all'));
+    const options=[...clients.values()].sort((a,b)=>(a.name||a.ip).localeCompare(b.name||b.ip,'ru'));
+    for(const client of options)select.add(new Option(client.name?client.name+' · '+client.ip:client.ip,client.id));
+    if(selected!=='all'&&!clients.has(selected)&&previous)select.add(new Option(previous.textContent,selected));
+    select.value=selected;
+}
 function parseLogLine(line) {
     const match=line.match(/^\[([^\]]+)\]\s*\[\s*(FATAL|ERROR|WARN(?:ING)?|INFO|DEBUG|VERBOSE)\s*\]\s*([\s\S]*)$/i);
     if(!match)return {time:'—',level:'OTHER',message:line};
@@ -752,14 +800,16 @@ function changeLogPage(delta){logPage=Math.max(0,logPage+delta);renderLogView();
 function renderLogView(resetPage=false) {
     if(resetPage)logPage=0;
     const raw=document.getElementById('log-content'),view=document.getElementById('log-view');if(!view)return;
-    const lines=raw.value.split(/\r?\n/).filter(line=>line.length),entries=lines.map(parseLogLine);
+    const lines=raw.value.split(/\r?\n/).filter(line=>line.length),entries=lines.map(line=>{const item=parseLogLine(line);item.client=getLogClient(item.message);return item;});
+    updateLogClientFilter(entries);
+    const clientFilter=document.getElementById('log-client-filter')?.value||'all';
     const search=document.getElementById('log-search').value.toLocaleLowerCase(),level=document.getElementById('log-level-filter').value;
-    const filtered=entries.filter(item=>(level==='all'||(level==='problems'?['ERROR','WARN'].includes(item.level):item.level===level))&&(!search||(item.time+' '+item.level+' '+item.message).toLocaleLowerCase().includes(search)));
+    const filtered=entries.filter(item=>(clientFilter==='all'||item.client?.id===clientFilter)&&(level==='all'||(level==='problems'?['ERROR','WARN'].includes(item.level):item.level===level))&&(!search||(item.time+' '+item.level+' '+item.message+' '+(item.client?.name||'')).toLocaleLowerCase().includes(search)));
     const isRaw=document.getElementById('log-raw-toggle').checked;
     view.hidden=isRaw;raw.hidden=!isRaw;
-    document.getElementById('log-search').disabled=isRaw;document.getElementById('log-level-filter').disabled=isRaw;
+    document.getElementById('log-search').disabled=isRaw;document.getElementById('log-client-filter').disabled=isRaw;document.getElementById('log-level-filter').disabled=isRaw;
     const errors=entries.filter(item=>item.level==='ERROR').length,warnings=entries.filter(item=>item.level==='WARN').length;
-    document.getElementById('log-summary').textContent=(isRaw?'Исходных строк: '+entries.length:'Найдено '+filtered.length+' из '+entries.length)+' · ошибок: '+errors+' · предупреждений: '+warnings+(logLoadedAt?' · обновлено '+logLoadedAt:'')+' · снимок журнала';
+    document.getElementById('log-summary').textContent=(isRaw?'Исходных строк: '+entries.length:'Найдено '+filtered.length+' из '+entries.length)+' · ошибок: '+errors+' · предупреждений: '+warnings+(logLoadedAt?' · обновлено '+logLoadedAt:'')+' · снимок журнала'+(logClientsAvailable?' · имена устройств: текущие':' · имена устройств недоступны');
     const pages=Math.max(1,Math.ceil(filtered.length/logPageSize));logPage=Math.min(logPage,pages-1);
     document.getElementById('log-newer').disabled=isRaw||logPage===0;document.getElementById('log-older').disabled=isRaw||logPage>=pages-1;
     document.getElementById('log-page-status').textContent=isRaw?'':(logPage+1)+' / '+pages+' · новые сверху';
@@ -768,16 +818,23 @@ function renderLogView(resetPage=false) {
     if(!filtered.length){const empty=document.createElement('p');empty.className='log-empty';empty.textContent=entries.length?'Нет событий по выбранным условиям.':'Журнал пуст.';view.append(empty);window.fitEditorPanes?.();return;}
     const table=document.createElement('table');table.className='log-table';
     const head=document.createElement('thead'),heading=document.createElement('tr');
-    for(const title of ['Время','Уровень','Сообщение']){const th=document.createElement('th');th.scope='col';th.textContent=title;heading.append(th);}head.append(heading);table.append(head);
+    for(const title of ['Время','Уровень','Клиент','Сообщение']){const th=document.createElement('th');th.scope='col';th.textContent=title;heading.append(th);}head.append(heading);table.append(head);
     const body=document.createElement('tbody');
     for(const item of visible){const row=document.createElement('tr');row.className='log-'+item.level.toLowerCase();
-        for(const [cls,value] of [['log-time',item.time],['log-level',item.level==='OTHER'?'—':item.level],['log-message',item.message]]){const cell=document.createElement('td');cell.className=cls;cell.textContent=value;row.append(cell);}body.append(row);
+        const clientCell=document.createElement('td');clientCell.className='log-client';
+        if(item.client){const name=document.createElement('span');name.textContent=item.client.name||item.client.ip;clientCell.append(name);if(item.client.name){const ip=document.createElement('small');ip.textContent=item.client.ip;clientCell.append(ip);}}else clientCell.textContent='—';
+        for(const [cls,value] of [['log-time',item.time],['log-level',item.level==='OTHER'?'—':item.level],['log-message',item.message]]){const cell=document.createElement('td');cell.className=cls;cell.textContent=value;if(cls==='log-message')row.append(clientCell);row.append(cell);}body.append(row);
     }
     table.append(body);view.append(table);window.fitEditorPanes?.();
 }
 async function loadLog() {
     const summary=document.getElementById('log-summary');if(summary)summary.textContent='Загрузка журнала…';
-    try {document.getElementById('log-content').value=await apiCall('get_log',null,null,true);logLoadedAt=new Date().toLocaleTimeString('ru-RU');renderLogView(true);}
+    try {
+        const [log,directory]=await Promise.all([apiCall('get_log',null,null,true),apiCall('get_clients',null,null,true).then(text=>({data:JSON.parse(text)})).catch(()=>({data:null}))]);
+        logClientsAvailable=!!directory.data;
+        logClientDirectory=directory.data?buildLogClientDirectory(directory.data):new Map();
+        document.getElementById('log-content').value=log;logLoadedAt=new Date().toLocaleTimeString('ru-RU');renderLogView(true);
+    }
     catch(error){if(summary)summary.textContent='Не удалось обновить журнал: '+error.message;}
 }
 

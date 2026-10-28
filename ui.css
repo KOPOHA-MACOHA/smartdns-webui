@@ -350,3 +350,9 @@ body:has(#action-panel:not([hidden])) { overflow:hidden; }
  .log-table .log-time { min-width:0; white-space:normal; }
  .log-table .log-message { grid-column:1/-1; min-width:0; overflow-wrap:anywhere; }
 }
+
+/* Client identity stays readable on narrow screens; raw logs are untouched. */
+#log-client-filter { width:auto; max-width:100%; min-width:180px; }
+.log-client { min-width:140px; max-width:240px; overflow-wrap:anywhere; }
+.log-client small { display:block; color:var(--muted); font:12px/1.5 ui-monospace,Consolas,monospace; }
+@media(max-width:600px) { .log-toolbar #log-client-filter { grid-column:1/-1; width:100%; min-width:0; } .log-table .log-client { grid-column:1/-1; max-width:none; } }

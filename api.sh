@@ -481,6 +481,22 @@ handle_api() {
                 echo "ERROR: invalid list filename"
             fi
             ;;
+        "get_clients")
+            # Read only on an explicit journal refresh; no daemon or polling.
+            clients=$(curl -fsS --connect-timeout 1 --max-time 3 --max-filesize 262144 http://127.0.0.1:79/rci/show/ip/hotspot 2>/dev/null) || {
+                echo 'ERROR: Keenetic client directory unavailable'; return 0;
+            }
+            case "$clients" in *'"host"'*) ;; *) echo 'ERROR: invalid client directory'; return 0 ;; esac
+            printf '{"hotspot":%s,"neighbors":[' "$clients"
+            ip -6 neigh show 2>/dev/null | awk '
+                $1 ~ /^[0-9a-fA-F:]+$/ { for(i=2;i<NF;i++) if($i=="lladdr" && $(i+1) ~ /^[0-9a-fA-F:]+$/) {
+                    printf "%s{\"ip\":\"%s\",\"mac\":\"%s\"}", sep, $1, $(i+1); sep=","; break
+                }}'
+            printf '],"router":['
+            ip -o addr show 2>/dev/null | awk '
+                {split($4,a,"/");if(a[1] ~ /^[0-9a-fA-F:.]+$/) {printf "%s\"%s\"", sep,a[1];sep=","}}'
+            printf ']}\n'
+            ;;
         "get_log")
             cat "$LOG_FILE" 2>/dev/null
             ;;
