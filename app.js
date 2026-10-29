@@ -259,7 +259,7 @@ function organizeConfigSections() {
     const coreColumns = ['core-options-column','core-dns-column'].map(name=>{const col=document.createElement('div');col.className=name;panels.core.append(col);return col;});
     cards.forEach(card => {
         let target = 'routing';
-        if (card.querySelector('#core-bind, #sec-bootstrap, #sec-upstream, #sec-fallback, #sec-logging-select')) target = 'core';
+        if (card.querySelector('#core-bind, #sec-bootstrap, #sec-upstream, #sec-logging-select')) target = 'core';
         else if (card.querySelector('#dynamic-groups-container')) target = 'groups';
         if(target==='core')coreColumns[card.querySelector('#core-bind,#sec-logging-select')?0:1].append(card);else panels[target].appendChild(card);
     });

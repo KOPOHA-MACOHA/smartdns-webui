@@ -142,7 +142,7 @@ const UI = {
         </div>`;
     },
     card: (title, id, linesArr, notice = '') => {
-        const dnsSection = ['bootstrap','upstream','fallback'].includes(id);
+        const dnsSection = ['bootstrap','upstream'].includes(id);
         const body = dnsSection
             ? '<textarea data-dns-records="' + UI.escape(JSON.stringify(linesArr)) + '" id="sec-' + id + '" class="form-control code-font dns-multiline-editor border-0 rounded-0 p-3" rows="' + Math.max(5, Math.min(12, linesArr.length + 2)) + '" spellcheck="false" oninput="markConfigDirty(event)" placeholder="Один DNS-сервер на строку; строки с # отключены">' + UI.escape(linesArr.map(dnsDisplay).join('\n')) + '</textarea>'
             : '<textarea id="sec-' + id + '" class="form-control code-font border-0 rounded-0 p-2" rows="' + Math.max(3, Math.min(15, linesArr.length)) + '" oninput="markConfigDirty(event)">' + UI.escape(linesArr.join('\n')) + '</textarea>';
@@ -646,7 +646,6 @@ function addConfigHelp(root) {
     const sections = {
         'sec-bootstrap': 'Серверы для получения IP-адресов DoH/DoT, заданных именами. Роль задаётся аргументом -bootstrap-dns, а не положением строки. # отключает сервер. Остальные аргументы импортированной записи сохраняются при редактировании адреса.',
         'sec-upstream': 'Серверы без явного -group. Членство в группах определяется аргументами, а не заголовками Raw. Серверы с -group тоже могут участвовать в default, если нет -exclude-default-group. UDP не шифруется; DoH/DoT шифруют соединение с DNS-сервером.',
-        'sec-fallback': 'Обычная группа с именем fallback. Само название не включает автоматическое переключение при отказе. Нужны правила, использующие эту группу.',
         'dynamic-groups-container': 'Наборы upstream для правил nameserver. Имя группы само по себе не направляет трафик в VPN. Дополнительные параметры серверов сохраняются; для изменения аргументов используйте Raw.',
         'dynamic-routes-container': 'Domain-set объединяет домены из файлов; nameserver выбирает для них DNS-группу. Это выбор DNS-резолвера, а не IP-маршрут или автоматическое переключение VPN.',
         'dynamic-addresses-container': 'Ручные ответы вместо обращения к upstream. Несколько доменов разделяются /, IP — запятыми. # отключает запись. Ошибочный IP направит клиентов не на тот сервер.',
@@ -677,7 +676,7 @@ function addConfigHelp(root) {
 
 // === ОСНОВНОЙ ПАРСЕР ===
 function parseConfigToSections(content) {
-    let coreLines = [], bootstrap = [], upstream = [], fallback = [], group = [], routing = [], other = [];
+    let coreLines = [], bootstrap = [], upstream = [], group = [], routing = [], other = [];
     let addresses = [];
     let routesObj = {}; 
     let logging = { level: 'notice' };
@@ -755,11 +754,7 @@ function parseConfigToSections(content) {
             if (membership.bootstrap) {
                 bootstrap.push(originalTrimmed);
             } else if (groupMatch) {
-                if (groupMatch[1] === 'fallback') {
-                    fallback.push(originalTrimmed); 
-                } else {
-                    group.push(originalTrimmed);
-                }
+                group.push(originalTrimmed);
             } else {
                 upstream.push(originalTrimmed);
             }
@@ -776,7 +771,6 @@ function parseConfigToSections(content) {
     try { if(localStorage.getItem('smartdns-ui-bind-mode')==='advanced') coreData.show_simple_bind=false; } catch (_) {}
     let bsClean = bootstrap;
     let upClean = upstream;
-    let fallbackClean = fallback;
     
     let groupsObj = {};
     group.forEach(line => {
@@ -798,7 +792,6 @@ function parseConfigToSections(content) {
             ${UI.coreCard(coreData, coreLines)}
             ${UI.card('Bootstrap DNS', 'bootstrap', bsClean, 'Закомментируйте (#) любой адрес, чтобы временно выключить его.')}
             ${UI.card('Вышестоящие DNS (Основная группа)', 'upstream', upClean, 'Серверы по умолчанию (без привязки к группам).')}
-            ${UI.card('DNS-группа fallback', 'fallback', fallbackClean, 'Это именованная группа; её название само по себе не включает автоматический резерв.')}
             ${UI.logCard(logging.level)}
         </div>
         <div class="col-md-6">
@@ -861,12 +854,11 @@ function organizeDnsSource(source) {
     if (finalNewline) lines.pop();
     const headings = [
         ['bootstrap','Bootstrap DNS'], ['upstream','Вышестоящие DNS (Основная группа)'],
-        ['fallback','DNS-группа fallback'], ['groups','Групповые записи']
+        ['groups','Групповые записи']
     ];
     const section = line => {
         const m = line.trim().match(/^#\s*(.*?)\s*#$/);
         if (!m || /^#+$/.test(m[1])) return null;
-        if (m[1] === 'Резервные DNS (Fallback)') return 'fallback';
         return headings.find(([,title])=>title===m[1])?.[0] || 'other';
     };
     const blocks = [], moves = new Map(headings.map(([id])=>[id,[]]));
@@ -877,7 +869,7 @@ function organizeDnsSource(source) {
         if (id) { current = id; blocks.push({id,index}); }
         if (!/^\s*(?:#+\s*)?server(?:-(?:tls|https|quic|h3|tcp))?\s+/.test(line)) return;
         const member = dnsMembership(line.trim());
-        const target = member.bootstrap ? 'bootstrap' : !member.groups.length ? 'upstream' : member.groups[0]==='fallback' ? 'fallback' : 'groups';
+        const target = member.bootstrap ? 'bootstrap' : !member.groups.length ? 'upstream' : 'groups';
         if (current !== target) { moves.get(target).push(line); removed.add(index); }
     });
     if (!removed.size) return source;
@@ -1014,8 +1006,6 @@ function gatherSectionsCanonical(root = window.document) {
     if (bsRows.length) { text += `##########\n# Bootstrap DNS #\n##########\n`; bsRows.forEach(line => { text += formatDnsForSection(line, '', '', true) + '\n'; }); text += '\n'; }
     const upRows = collectDnsRows('upstream');
     if (upRows.length) { text += `##########\n# Вышестоящие DNS (Основная группа) #\n##########\n`; upRows.forEach(line => { text += formatDnsForSection(line) + '\n'; }); text += '\n'; }
-    const fbRows = collectDnsRows('fallback');
-    if (fbRows.length) { text += `##########\n# DNS-группа fallback #\n##########\n`; fbRows.forEach(line => { text += formatDnsForSection(line, 'fallback', 'fallback') + '\n'; }); text += '\n'; }
     const grpItems = document.querySelectorAll('.group-item');
     if (grpItems.length > 0) {
         text += `##########\n# Групповые записи #\n##########\n`;

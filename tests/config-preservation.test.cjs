@@ -221,7 +221,7 @@ test('every standard core control and visual section has keyboard-accessible hel
             assert(ui.document.getElementById(id).closest('.row').querySelector('summary[aria-label="Пояснение"]'),id);
         }
         for (const id of ['speed-ping','speed-tcp443','speed-tcp80']) assert(ui.document.getElementById(id).parentElement.querySelector('.setting-help'),id);
-        for (const id of ['sec-bootstrap','sec-upstream','sec-fallback','dynamic-groups-container','dynamic-routes-container','dynamic-addresses-container']) assert(ui.document.getElementById(id).closest('.card').querySelector('.card-header .setting-help'),id);
+        for (const id of ['sec-bootstrap','sec-upstream','dynamic-groups-container','dynamic-routes-container','dynamic-addresses-container']) assert(ui.document.getElementById(id).closest('.card').querySelector('.card-header .setting-help'),id);
         ui.window.addConfigHelp(ui.document);
         assert.equal(ui.document.querySelectorAll('#core-bind').length,1);
         assert.equal(ui.document.getElementById('core-bind').closest('.row').querySelectorAll('.setting-help').length,1);
@@ -238,7 +238,7 @@ test('explicit DNS organization moves misplaced servers by membership without ch
         assert.match(organized,/# Вышестоящие DNS \(Основная группа\) #[\s\S]*server 1\.1\.1\.1/);
         assert.match(organized,/# Bootstrap DNS #[\s\S]*server 9\.9\.9\.9 -b -g team/);
         assert.match(organized,/# Групповые записи #[\s\S]*#server-tls dns.example -g team -tls-host-verify dns.example/);
-        assert.match(organized,/# DNS-группа fallback #[\s\S]*server 8\.8\.8\.8 -group fallback/);
+        assert.match(organized,/# Групповые записи #[\s\S]*server 8\.8\.8\.8 -group fallback/);
         assert(organized.includes('# retain this note\r\n'));
         assert.equal(ui.window.organizeDnsSource(organized),organized,'organization must be idempotent');
         const reloaded=editor(organized);
@@ -336,4 +336,14 @@ test('DNS organization action belongs to the central change panel',()=>{
         assert.equal(action.closest('#change-center').id,'change-center');
         assert(!dom.window.document.getElementById('btn-mode-raw').parentElement.contains(action));
     } finally {dom.window.close()}
+});
+
+test('fallback is an ordinary named group, without a dedicated Core card',()=>{
+ const input=base+'# retained comment\nserver-tls dns.example -group fallback -exclude-default-group\n#server 9.9.9.9 -g fallback\nnameserver /domain-set:example/fallback\n';
+ const ui=editor(input);try{
+  assert.equal(ui.document.getElementById('sec-fallback'),null);
+  const group=[...ui.document.querySelectorAll('.group-item')].find(g=>g.querySelector('.group-name-input').value==='fallback');assert(group);
+  assert.equal(ui.save(),input);ui.document.getElementById('core-cache-size').value='2048';
+  assert.deepEqual(active(ui.save()),active(input.replace('cache-size 4096','cache-size 2048')));
+ }finally{ui.close()}
 });
