@@ -232,7 +232,7 @@ button,input,select,textarea { font:inherit; }
 .action-panel-footer .form-check { margin:16px 0!important; }
 #settings-toggle { position:relative; }
 #settings-toggle.has-changes::after { content:''; position:absolute; right:3px; top:3px; width:7px; height:7px; background:var(--accent); border-radius:50%; }
-body:has(#action-panel:not([hidden])) { overflow:hidden; }
+html:has(#action-panel:not([hidden])) { overflow-y:hidden; }
 @media(min-width:1280px) { #settings-subtab-core.active { column-count:2; column-gap:20px; } #settings-subtab-core.active > .card { display:inline-block; width:100%; break-inside:avoid; } #dynamic-groups-container { column-count:2; column-gap:16px; } #dynamic-groups-container > .group-item { display:inline-block; width:100%; break-inside:avoid; } }
 @media(max-width:1000px) { #dynamic-routes-container { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:767.98px) {

@@ -40,8 +40,8 @@ printf 'LISTEN\tTCP\t127.0.0.1\t6054\nADDRESS\tmanual.example\t192.0.2.1\n' > "$
 printf 'ROUTE\tgroup\tlist\trouted.example\n' > "$tx/candidate.queries"
 : > "$work/calls"
 apply_health "$CONF_FILE" >/dev/null
-test "$(wc -l < "$work/calls")" -eq 3
-grep -q '@127.0.0.1 -p 6054 routed.example A +tcp' "$work/calls"
+test "$(wc -l < "$work/calls")" -eq 2
+! grep -q 'routed.example'  "$work/calls"
 grep -q '@127.0.0.1 -p 6054 manual.example A +tcp' "$work/calls"
 # Missing and incorrect static replies must fail, as must a failed DNS request.
 sed 's/192.0.2.1/192.0.2.2/' "$tx/candidate.plan" > "$tx/new-plan"

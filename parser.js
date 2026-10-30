@@ -855,6 +855,22 @@ function parseConfigToSections(content) {
         }
     });
 
+    // Fold partial directives by selector, then present equal settings as one card.
+    // Preserve all original lines until this card is edited; edits emit effective rules.
+    const effective=[];
+    for(const p of policies) {
+        const prev=!p.extra && effective.find(v=>!v.extra && v.domain===p.domain && v.enabled===p.enabled);
+        if(prev) {
+            for(const key of ['group','response','speed','expired','https'])if(p[key])prev[key]=p[key];
+            prev.raw.push(...p.raw);
+        } else effective.push(p);
+    }
+    policies.length=0;
+    for(const p of effective) {
+        const prev=!p.extra && policies.find(v=>!v.extra && ['enabled','group','response','speed','expired','https'].every(key=>v[key]===p[key]));
+        if(prev) {prev.domain+='\n'+p.domain;prev.raw.push(...p.raw);} else policies.push(p);
+    }
+
     coreData.simple_bind = simpleDnsBind(coreData.bind,coreData.bind_tcp,coreLines.join('\n'));
     coreData.show_simple_bind = !!coreData.simple_bind;
     try { if(localStorage.getItem('smartdns-ui-bind-mode')==='advanced') coreData.show_simple_bind=false; } catch (_) {}
