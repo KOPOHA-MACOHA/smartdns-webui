@@ -74,17 +74,17 @@ textarea.code-font { font-family: ui-monospace, SFMono-Regular, Consolas, monosp
 .CodeMirror-cursor { border-left: 1px solid var(--text) !important; }
 .CodeMirror-selected { background: var(--accent-soft) !important; }
 .cm-s-default .cm-comment { color: #7c8b9b; }
-.cm-s-default .cm-keyword { color: #526f91; font-weight: 600; }
-.cm-s-default .cm-builtin { color: #526f91; }
-.cm-s-default .cm-attribute { color: #866f55; }
-.cm-s-default .cm-string { color: #58765f; }
-.cm-s-default .cm-number { color: #866f55; }
+.cm-s-default .cm-keyword { color: #35648b; font-weight: 600; }
+.cm-s-default .cm-builtin { color: #35648b; }
+.cm-s-default .cm-attribute { color: #876331; }
+.cm-s-default .cm-string { color: #3f7653; }
+.cm-s-default .cm-number { color: #876331; }
 :root[data-theme="dark"] .cm-s-default .cm-comment { color: #819579; }
-:root[data-theme="dark"] .cm-s-default .cm-keyword { color: #91acc7; }
-:root[data-theme="dark"] .cm-s-default .cm-builtin { color: #91acc7; }
-:root[data-theme="dark"] .cm-s-default .cm-attribute { color: #b9af9c; }
-:root[data-theme="dark"] .cm-s-default .cm-string { color: #a5b7a0; }
-:root[data-theme="dark"] .cm-s-default .cm-number { color: #b9af9c; }
+:root[data-theme="dark"] .cm-s-default .cm-keyword { color: #8cbce6; }
+:root[data-theme="dark"] .cm-s-default .cm-builtin { color: #8cbce6; }
+:root[data-theme="dark"] .cm-s-default .cm-attribute { color: #d1b080; }
+:root[data-theme="dark"] .cm-s-default .cm-string { color: #8fc7a5; }
+:root[data-theme="dark"] .cm-s-default .cm-number { color: #d1b080; }
 .list-group-item { background: var(--surface); color: var(--text); border-color: var(--line); }
 .list-group-item.active { background: var(--accent-soft); color: var(--accent); border-color: var(--line); }
 .modal-content { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-radius: 12px; }
@@ -374,8 +374,8 @@ html:has(#action-panel:not([hidden])) { overflow-y:hidden; }
 .route-policy>summary { cursor:pointer; color:var(--accent); font-size:13px; }
 .route-policy .policy-fields { margin-top:14px; }
 
-.cm-s-default .cm-atom { color:#526d7e; }
-:root[data-theme="dark"] .cm-s-default .cm-atom { color:#a8b4c2; }
+.cm-s-default .cm-atom { color:#735b96; }
+:root[data-theme="dark"] .cm-s-default .cm-atom { color:#b8a6d4; }
 .header-file-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
 .header-file-actions[hidden] { display:none; }
 .topbar-actions { margin-left:0; }

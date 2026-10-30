@@ -1047,6 +1047,36 @@ function organizeDnsSource(source) {
 
 
 // Move related directives as a stable sequence: overlapping sets/rules may override each other.
+
+// Pair independent HTTPS filters with their selector without reordering competing HTTPS rules.
+function pairPolicyRecords(records) {
+    const result=[],segment=[];
+    const overlapping=(a,b)=>{
+        if(!a||!b||a.startsWith('domain-set:')||b.startsWith('domain-set:')||!/^\w[\w.-]*$/.test(a)||!/^\w[\w.-]*$/.test(b))return true;
+        a=a.toLowerCase().replace(/\.$/,'');b=b.toLowerCase().replace(/\.$/,'');
+        return a===b||a.endsWith('.'+b)||b.endsWith('.'+a);
+    };
+    const flush=()=>{
+        const last=new Map();segment.forEach(row=>{if(row.kind==='domain-rules')last.set(row.key,row);});
+        for(const rule of last.values()) {
+            const matches=segment.filter(row=>row.kind==='https-record'&&row.key===rule.key);
+            if(matches.length!==1)continue;
+            const https=matches[0],from=segment.indexOf(https),anchor=segment.indexOf(rule);
+            const crossed=from<anchor?segment.slice(from+1,anchor+1):segment.slice(anchor+1,from);
+            if(crossed.some(row=>row.kind==='https-record'&&overlapping(row.selector,https.selector)))continue;
+            segment.splice(from,1);segment.splice(segment.indexOf(rule)+1,0,https);
+        }
+        result.push(...segment.map(row=>row.line));segment.length=0;
+    };
+    for(const line of records) {
+        const m=line.match(/^\s*(#\s*)?(domain-rules|https-record)\s+\/([^/\s]+)\//);
+        if(!m){flush();result.push(line);continue;}
+        const selector=m[3],key=(m[1]?'disabled:':'active:')+(selector.startsWith('domain-set:')?selector:selector.toLowerCase().replace(/\.$/,''));
+        segment.push({line,kind:m[2],selector,key});
+    }
+    flush();return result;
+}
+
 function organizePolicySource(source) {
     const newline=source.includes('\r\n')?'\r\n':'\n',final=source.endsWith('\n');
     const lines=source.split(/\r?\n/);if(final)lines.pop();
@@ -1067,7 +1097,7 @@ function organizePolicySource(source) {
     if(anchor>first) {anchor=first;heading=true;}
     const output=[];
     for(let i=0;i<=lines.length;i++) {
-        if(i===anchor)output.push(...(heading?['##########','# Правила DNS (домены и списки) #','##########']:[]),...records,...(heading?['']:[]));
+        if(i===anchor)output.push(...(heading?['##########','# Правила DNS (домены и списки) #','##########']:[]),...pairPolicyRecords(records),...(heading?['']:[]));
         if(i<lines.length&&!selected.has(i))output.push(lines[i]);
     }
     return output.join(newline)+(final?newline:'');
