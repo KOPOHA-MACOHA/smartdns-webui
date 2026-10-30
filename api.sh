@@ -378,8 +378,14 @@ apply_request() (
         [ -f "$journal" ] || continue
         case "$(cat "$journal")" in COMMITTED|ROLLED_BACK|REJECTED) ;; *) echo 'ERROR: unresolved apply journal; inspect through SSH'; exit 1 ;; esac
     done
-    count=$(find "$root" -mindepth 1 -maxdepth 1 -type d | wc -l)
-    [ "$count" -lt 20 ] || { echo 'ERROR: apply history limit reached; archive journals through SSH'; exit 1; }
+    count=$(find "$root" -mindepth 1 -maxdepth 1 -type d -name 'tx-*' | wc -l)
+    if [ "$count" -ge 20 ]; then
+        mkdir -p "$root/archive" || exit 1
+        for old in $(ls -dt "$root"/tx-* | tail -n +11); do
+            [ -d "$old" ] || continue
+            case "$(cat "$old/status" 2>/dev/null)" in COMMITTED|ROLLED_BACK|REJECTED) mv "$old" "$root/archive/" || exit 1 ;; esac
+        done
+    fi
     tx=$(mktemp -d "$root/tx-XXXXXXXXXXXX") || exit 1
     cp -p "$CONF_FILE" "$tx/candidate" && cat > "$tx/candidate" || exit 1
     [ "$(wc -c < "$tx/candidate")" -le 262144 ] || { echo 'ERROR: candidate exceeds 256 KiB'; exit 1; }

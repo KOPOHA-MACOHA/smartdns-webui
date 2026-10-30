@@ -57,7 +57,8 @@ apply_health() (
     # actual nameserver routes rather than bypassing them with extra listeners.
     # Prefer a UDP listener for route/static checks, or TCP in TCP-only configs.
     endpoint=$(awk -F '\t' '$1=="LISTEN" {if(!first)first=$2 "\t" $3 "\t" $4;if($2=="UDP"){print $2 "\t" $3 "\t" $4;found=1;exit}} END{if(!found)print first}' "$tx/$snapshot.plan")
-    awk -F '\t' -v endpoint="$endpoint" '$1=="ROUTE" {print endpoint "\t" $4 "\tANY"}' "$tx/$snapshot.queries" >> "$tx/health-queries"
+    # Route providers were already tested in preflight. Their transient failures
+    # must not label a restored, responding local DNS service as a failed rollback.
     awk -F '\t' -v endpoint="$endpoint" '$1=="ADDRESS" {print endpoint "\t" $2 "\t" $3}' "$tx/$snapshot.plan" >> "$tx/health-queries"
     start=$(date +%s)
     tab=$(printf '\t')
