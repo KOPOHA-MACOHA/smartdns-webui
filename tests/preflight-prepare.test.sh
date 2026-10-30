@@ -48,3 +48,22 @@ test "$(grep -c '^domain-set -name "shared"' "$work/sandbox.conf")" -eq 3
 test "$(grep -c '^ROUTE' "$work/probes")" -eq 3
 for id in 1 2 3;do grep -q "LIST.*$id$" "$work/probes";done
 echo 'PASS: shared domain-set copies and probes every member file'
+
+# Resolver-only domain policies stay in the sandbox and add probes for their selected group.
+printf 'bind :53\nserver 1.1.1.1\nserver-tcp 1.0.0.1 -exclude-default-group -group images\ndomain-set -name pictures -file /source/images.list\ndomain-rules /ytimg.com/ -nameserver images -response-mode fastest-ip -speed-check-mode tcp:443 -no-serve-expired\ndomain-rules /domain-set:pictures/ -nameserver images\nhttps-record /ytimg.com/#\n' > "$work/candidate"
+prepare
+grep -q '^domain-rules /ytimg.com/ -nameserver images' "$work/sandbox.conf"
+grep -q '^https-record /ytimg.com/#$' "$work/sandbox.conf"
+grep -q 'DOMAIN.*ytimg.com' "$work/probes"
+grep -q 'LIST' "$work/probes"
+for unsafe in 'domain-rules /domain/ -ipset test' 'domain-rules /domain/ -nftset test' 'domain-rules /domain/ -group other' 'domain-rules /domain/ -speed-check-mode tcp:99999' 'domain-rules /domain/ -response-mode wrong' 'domain-rules /domain/ -nameserver'; do
+ printf 'server 1.1.1.1\n%s\n' "$unsafe" > "$work/candidate"
+ if prepare; then echo "Unsafe domain policy accepted: $unsafe";exit 1;fi
+done
+printf 'server 1.1.1.1\ndomain-rules /ytimg.com/ -nameserver missing\n' > "$work/candidate"
+if awk -v version=46.1 -f "$BASE_DIR/validator.awk" "$BASE_DIR/validator-46.1.txt" "$work/candidate" > "$work/static"; then exit 1;fi
+grep -q '^E' "$work/static"
+printf 'server 1.1.1.1\ndomain-rules /domain-set:missing/ -no-serve-expired\n' > "$work/candidate"
+if awk -v version=46.1 -f "$BASE_DIR/validator.awk" "$BASE_DIR/validator-46.1.txt" "$work/candidate" > "$work/static"; then exit 1;fi
+grep -q '^E' "$work/static"
+echo 'PASS: safe domain policies preserve sandbox isolation and validate references'

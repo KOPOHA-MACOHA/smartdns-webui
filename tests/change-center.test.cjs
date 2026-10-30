@@ -205,3 +205,17 @@ test('mobile file picker shares drafts and undo, and creation controls do not wr
   assert(!e.calls.some(call=>['save_list','delete_list'].includes(call.action)));
  }finally{e.close()}
 });
+
+
+test('domain policy changes, deletion and additions share keyboard undo and survive Raw switching',async()=>{
+ const input=config+'domain-rules /ytimg.com/ -response-mode fastest-ip -no-serve-expired\nhttps-record /ytimg.com/#\n';
+ const e=await editor(input),{w}=e;try{
+  assert.equal(w.gatherSectionsText(),input);w.switchConfigSubtab('routing');
+  const select=w.document.querySelector('.policy-response');select.value='first-ping';select.dispatchEvent(new w.Event('change',{bubbles:true}));
+  assert.match(w.gatherSectionsText(),/-response-mode first-ping/);w.undoEditorChange();assert.equal(w.gatherSectionsText(),input);w.redoEditorChange();assert.match(w.gatherSectionsText(),/-response-mode first-ping/);
+  w.document.querySelector('.policy-enabled').click();assert.match(w.gatherSectionsText(),/# domain-rules/);w.undoEditorChange();assert(!w.document.querySelector('.domain-policy').classList.contains('is-disabled'));
+  w.addDomainPolicy();assert(e.state().get().draft.incomplete);w.undoEditorChange();assert.equal(w.document.querySelectorAll('.domain-policy').length,1);
+  w.document.querySelector('.domain-policy .btn-outline-danger').click();assert(!w.gatherSectionsText().includes('domain-rules'));w.undoEditorChange();assert.match(w.gatherSectionsText(),/-response-mode first-ping/);
+  w.switchSettingsMode('raw');assert.match(w.rawEditor.getValue(),/-response-mode first-ping/);w.switchSettingsMode('ui');assert.equal(w.document.querySelector('.policy-response').value,'first-ping');
+ }finally{e.close()}
+});
