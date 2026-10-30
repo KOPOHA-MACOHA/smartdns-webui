@@ -369,3 +369,7 @@ html:has(#action-panel:not([hidden])) { overflow-y:hidden; }
 .policy-field>span { display:flex; align-items:center; gap:6px; font-size:13px; }
 .domain-policy.is-disabled>summary { color:var(--comment,#78a45c); }
 @media(max-width:650px) { .policy-fields { grid-template-columns:minmax(0,1fr); } .policy-summary { display:block; margin-top:5px; } }
+
+.route-policy { margin-top:12px; border-top:1px solid var(--line); padding-top:12px; }
+.route-policy>summary { cursor:pointer; color:var(--accent); font-size:13px; }
+.route-policy .policy-fields { margin-top:14px; }
