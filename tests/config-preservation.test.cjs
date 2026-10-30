@@ -347,3 +347,5 @@ test('fallback is an ordinary named group, without a dedicated Core card',()=>{
   assert.deepEqual(active(ui.save()),active(input.replace('cache-size 4096','cache-size 2048')));
  }finally{ui.close()}
 });
+
+test('rule organization preserves overlapping selector precedence and line endings',()=>{const source='bind :53\r\nserver 1.1.1.1\r\n##########\r\n# Логирование #\r\n##########\r\nlog-level info\r\ndomain-set -name a -file /tmp/a.list\r\nnameserver /domain-set:a/one\r\ndomain-rules /example.test/ -nameserver two\r\nhttps-record /example.test/#\r\nnameserver /example.test/three';const e=editor(source);try{const out=e.window.organizeDnsSource(source);const relevant=s=>s.split(/\r?\n/).filter(line=>/^(domain-set|nameserver|domain-rules|https-record) /.test(line));assert.deepEqual(relevant(out),relevant(source));assert(!out.endsWith('\n'));assert.equal(e.window.organizeDnsSource(out),out);assert(out.indexOf('domain-set ')<out.indexOf('# Логирование'));}finally{e.close()}});
