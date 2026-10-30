@@ -178,7 +178,7 @@ const UI = {
             <select class="form-select form-select-sm route-file-select" data-current-path="${UI.escape(path)}" onchange="this.dataset.currentPath=this.value; markConfigDirty(event)"><option value="" disabled ${path ? '' : 'selected'}>Выберите список…</option>${path ? '<option value="' + UI.escape(path) + '" selected>' + UI.escape(path) + '</option>' : ''}</select>
             <button type="button" class="icon-action danger" onclick="this.closest('.route-file-row').remove(); markConfigDirty();" title="Убрать список"><i class="bi bi-trash3"></i></button>
         </div>`,
-    routeCard: (name, group, files) => `
+    routeCard: (name, group, files, policy = {}) => `
         <div class="route-item border p-2 mb-2 rounded position-relative shadow-sm">
             <div class="route-heading d-flex gap-2 align-items-center mb-2">
                 <i class="bi bi-grip-vertical text-secondary drag-handle" style="cursor:grab;font-size:1.1rem" title="Перетащить"></i>
@@ -195,6 +195,7 @@ const UI = {
                 ${(files || '').split(/\r?\n/).filter(f => f.trim()).map(f => UI.routeFileRow(f)).join('') || '<div class="route-files-empty settings-section-hint mb-2">Списки ещё не добавлены</div>'}
                 </div><button class="route-add-file" type="button" onclick="addRouteFileUI(this)"><i class="bi bi-plus-lg me-1"></i>Добавить ещё список</button><p class="route-files-note">Все списки в этом правиле используют выбранную DNS-группу.</p></div>
             </div>
+            ${routePolicyCard(policy)}
         </div>`,
 
     groupCard: (name, content) => `
@@ -714,6 +715,22 @@ function domainPolicyCard(p={}) {
     if(p.speed&&!speedOptions.some(([v])=>v===p.speed))speedOptions.push([p.speed,p.speed+' (из конфига)']);
     return '<details class="domain-policy'+(p.enabled?'':' is-disabled')+'" '+(!p.domain?'open':'')+' data-policy="'+UI.escape(JSON.stringify(p))+'"><summary><span class="policy-title">'+UI.escape(p.domain||'Новое правило')+'</span><span class="policy-summary">'+UI.escape(domainPolicySummary(p))+'</span></summary><div class="policy-body"><div class="policy-toolbar"><label><input type="checkbox" class="policy-enabled" '+(p.enabled?'checked':'')+' onchange="updateDomainPolicy(this,event)"> Правило включено</label><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.domain-policy\').remove();markConfigDirty()">Удалить правило</button></div><div class="policy-fields"><label class="policy-field"><span>Домены или domain-set '+UI.help('Один домен на строку, без / и адреса IP. Правило действует также на поддомены. Для существующего набора: domain-set:имя. Это настройки поиска адреса, а не фиксированный IP.')+'</span><textarea rows="2" class="form-control policy-domain" oninput="updateDomainPolicy(this,event)" placeholder="ytimg.com&#10;ggpht.com">'+UI.escape(p.domain)+'</textarea></label>'+select('group','DNS-группа',[['','Как в основных настройках'],[p.group,p.group]].filter(([v],i)=>i===0||v),'Группа серверов для поиска адреса. Не означает направление трафика в VPN; обычный DNS по умолчанию наследуется.')+select('response','Выбор IP',[['','Как в основных настройках'],['fastest-response','Быстрый DNS-ответ'],['first-ping','Первый доступный IP'],['fastest-ip','IP с наименьшей задержкой']],'fastest-ip выбирает IP по проверкам задержки. Это не измерение скорости загрузки и не гарантия работы сервиса.')+select('speed','Проверка доступности',speedOptions,'TCP проверяет установление соединения на выбранный порт; Ping — ICMP. Проверки могут задерживать первый ответ. Порядок методов имеет значение.')+select('expired','Просроченный кэш',[['','Как в основных настройках'],['no','Не использовать']],'Не использовать ответы с истёкшим TTL. Действующий кэш продолжает работать; при отказе upstream просроченный ответ не поможет.')+select('https','DNS-записи HTTPS',[['','Без отдельного правила'],['block','Не возвращать (тип 65)']],'Пустой ответ на DNS-запрос HTTPS. Сам HTTPS сайта не блокируется. Убирает дополнительные подсказки подключения, но не запрещает QUIC/HTTP3.')+'</div>'+(p.extra?'<div class="settings-section-hint">Дополнительные аргументы сохранены. Для их изменения используйте Raw.</div>':'')+'<input type="hidden" class="policy-extra" value="'+UI.escape(p.extra)+'"></div></details>';
 }
+function routePolicyCard(policy={}) {
+    const p={response:'',speed:'',expired:'',https:'',raw:[],...policy};
+    const select=(name,label,options,help)=>'<label class="policy-field"><span>'+label+' '+UI.help(help)+'</span><select class="form-select route-policy-'+name+'" onchange="markConfigDirty(event)">'+options.map(([v,t])=>'<option value="'+UI.escape(v)+'" '+(p[name]===v?'selected':'')+'>'+UI.escape(t)+'</option>').join('')+'</select></label>';
+    const speedOptions=[['','Как в основных настройках'],['tcp:443','TCP 443'],['tcp:80','TCP 80'],['ping','ICMP Ping'],['tcp:443,ping','TCP 443, затем Ping'],['none','Не проверять']];
+    if(p.speed&&!speedOptions.some(([v])=>v===p.speed))speedOptions.push([p.speed,p.speed+' (из конфига)']);
+    return '<details class="route-policy" data-route-policy="'+UI.escape(JSON.stringify(p))+'"><summary>Обработка DNS '+UI.help('Отдельные настройки для всех списков этого маршрута. По умолчанию наследуются общие параметры SmartDNS. DNS-группа выбирается выше.')+'</summary><div class="policy-fields">'+select('response','Выбор IP',[['','Как в основных настройках'],['fastest-response','Быстрый DNS-ответ'],['first-ping','Первый доступный IP'],['fastest-ip','IP с наименьшей задержкой']],'fastest-ip выбирает IP по проверкам задержки. Это не измерение скорости загрузки и не гарантия работы сервиса.')+select('speed','Проверка доступности',speedOptions,'TCP проверяет установление соединения на выбранный порт; Ping — ICMP. Проверки могут задерживать первый ответ. Порядок методов имеет значение.')+select('expired','Просроченный кэш',[['','Как в основных настройках'],['no','Не использовать']],'Не использовать ответы с истёкшим TTL. Действующий кэш продолжает работать; при отказе upstream просроченный ответ не поможет.')+select('https','DNS-записи HTTPS',[['','Без отдельного правила'],['block','Не возвращать (тип 65)']],'Пустой ответ на DNS-запрос HTTPS. Сам HTTPS сайта не блокируется. Убирает дополнительные подсказки подключения, но не запрещает QUIC/HTTP3.')+'</div></details>';
+}
+function gatherRoutePolicy(item,name,group) {
+    const panel=item.querySelector('.route-policy');if(!panel)return '';
+    const original=JSON.parse(panel.dataset.routePolicy);
+    const p=Object.fromEntries(['response','speed','expired','https'].map(key=>[key,panel.querySelector('.route-policy-'+key).value]));
+    if(original.raw.length && original.domain==='domain-set:'+name && original.sourceGroup===group && Object.keys(p).every(key=>p[key]===original[key]))return original.raw.join('\n');
+    const options=[p.response?'-response-mode '+p.response:'',p.speed?'-speed-check-mode '+p.speed:'',p.expired?'-no-serve-expired':''].filter(Boolean).join(' ');
+    return [(options?'domain-rules /domain-set:'+name+'/ '+options:''),(p.https?'https-record /domain-set:'+name+'/#':'')].filter(Boolean).join('\n');
+}
+
 function domainPolicySummary(p) {
     return [p.enabled?'':'Отключено',p.group?'DNS: '+p.group:'DNS: по умолчанию',p.response==='fastest-ip'?'Выбор по задержке':'',p.speed,p.expired?'Без просроченного кэша':'',p.https?'Без HTTPS-записей':'',p.extra?'Доп. аргументы':''].filter(Boolean).join(' · ');
 }
@@ -867,6 +884,11 @@ function parseConfigToSections(content) {
     }
     policies.length=0;
     for(const p of effective) {
+        const name=p.domain.startsWith('domain-set:')?p.domain.slice(11):'';
+        const route=routesObj[name];
+        if(route && route.files.length && route.group && p.enabled && !p.extra && (!p.group || p.group===route.group)) {
+            route.policy={...p,sourceGroup:route.group};continue;
+        }
         const prev=!p.extra && policies.find(v=>!v.extra && ['enabled','group','response','speed','expired','https'].every(key=>v[key]===p[key]));
         if(prev) {prev.domain+='\n'+p.domain;prev.raw.push(...p.raw);} else policies.push(p);
     }
@@ -888,7 +910,7 @@ function parseConfigToSections(content) {
     });
 
     let groupsHtml = Object.keys(groupsObj).map(g => UI.groupCard(g, groupsObj[g].join('\n'))).join('');
-    let routesHtml = Object.keys(routesObj).map(r => UI.routeCard(r, routesObj[r].group, routesObj[r].files.join('\n'))).join('');
+    let routesHtml = Object.keys(routesObj).map(r => UI.routeCard(r, routesObj[r].group, routesObj[r].files.join('\n'), routesObj[r].policy)).join('');
     let addrHtml = addresses.map(a => UI.addressRow(a.domain, a.ip, a.enabled)).join('');
 
     const html = `
@@ -1144,6 +1166,7 @@ function gatherSectionsCanonical(root = window.document) {
                     }
                 });
                 text += `nameserver /domain-set:${name}/${group}\n`;
+                const policy=gatherRoutePolicy(item,name,group);if(policy)text+=policy+'\n';
             }
         });
         text += '\n';
