@@ -48,7 +48,7 @@ preflight {
         next
     }
     if(cmd=="domain-rules") {
-        if(n<3 || token[2]!~/^\/[^/]+\/$/) {report("E",FNR,"Для изолированной проверки нужно правило /домен/ или /domain-set:имя/.");next}
+        if(n<3 || token[2]!~/^\/[^\/]+\/$/) {report("E",FNR,"Для изолированной проверки нужно правило /домен/ или /domain-set:имя/.");next}
         selector=token[2];sub(/^\//,"",selector);sub(/\/$/,"",selector)
         name=""
         for(i=3;i<=n;i++) {
