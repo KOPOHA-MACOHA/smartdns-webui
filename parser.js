@@ -1000,7 +1000,7 @@ function organizeDnsSource(source) {
         const target = member.bootstrap ? 'bootstrap' : !member.groups.length ? 'upstream' : 'groups';
         if (current !== target) { moves.get(target).push(line); removed.add(index); }
     });
-    if (!removed.size) return source;
+    if (!removed.size) return organizePolicySource(source);
     const insert = new Map();
     const missing = [];
     for (const [id,title] of headings) {
@@ -1019,7 +1019,35 @@ function organizeDnsSource(source) {
         if (insert.has(i)) result.push(...insert.get(i));
         if (i<lines.length && !removed.has(i)) result.push(lines[i]);
     }
-    return result.concat(missing).join(newline)+(finalNewline?newline:'');
+    return organizePolicySource(result.concat(missing).join(newline)+(finalNewline?newline:''));
+}
+
+
+// Move related directives as a stable sequence: overlapping sets/rules may override each other.
+function organizePolicySource(source) {
+    const newline=source.includes('\r\n')?'\r\n':'\n',final=source.endsWith('\n');
+    const lines=source.split(/\r?\n/);if(final)lines.pop();
+    const selected=new Set(),records=[];
+    lines.forEach((line,i)=>{if(/^\s*(?:#+\s*)?(?:domain-set|nameserver|domain-rules|https-record)\s+/.test(line)){selected.add(i);records.push(line);}});
+    if(!records.length)return source;
+    if(records.some(line=>/^\s*(?:#+\s*)?domain-rules\s+/.test(line) && (!readDomainPolicy(line)||readDomainPolicy(line).extra)))throw new Error('Правила с дополнительными аргументами нужно упорядочить вручную: перенос может изменить приоритет адресов или других настроек.');
+    if(/^\s*conf-file\b/m.test(source))throw new Error('Конфиг содержит conf-file: порядок правил из включаемых файлов нужно сохранить вручную.');
+    let anchor=lines.findIndex(line=>/^\s*#\s*(?:Маршрутизация списков \(Domain-sets\)|Правила DNS \(домены и списки\))\s*#\s*$/.test(line));
+    let heading=false;
+    if(anchor>=0) {anchor++;if(/^\s*#{3,}\s*$/.test(lines[anchor]||''))anchor++;}
+    else {
+        anchor=lines.findIndex(line=>/^\s*#\s*(?:Локальные адреса \(Статика\)|Логирование)\s*#\s*$/.test(line));
+        if(anchor<0)anchor=Math.min(...selected);else if(anchor>0&&/^\s*#{3,}\s*$/.test(lines[anchor-1]))anchor--;
+        heading=true;
+    }
+    const first=Math.min(...selected);
+    if(anchor>first) {anchor=first;heading=true;}
+    const output=[];
+    for(let i=0;i<=lines.length;i++) {
+        if(i===anchor)output.push(...(heading?['##########','# Правила DNS (домены и списки) #','##########']:[]),...records,...(heading?['']:[]));
+        if(i<lines.length&&!selected.has(i))output.push(lines[i]);
+    }
+    return output.join(newline)+(final?newline:'');
 }
 
 // Compare editor states, then apply only their actual changes to the source file.

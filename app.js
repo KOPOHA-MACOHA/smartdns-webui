@@ -128,11 +128,24 @@ function renderChangeCenter() {
     if(settingsToggle){settingsToggle.classList.toggle('has-changes',changes.dirtyCount()>0);settingsToggle.title=changes.dirtyCount()?'Настройки и действия · есть несохранённые правки':'Настройки и действия';}
     const count=document.getElementById('change-count');if(count)count.textContent=changes.dirtyCount()?'Несохранённых файлов: '+changes.dirtyCount():'';
 }
+function fileActionStatus(message) {const el=document.getElementById('file-action-status');if(el)el.textContent=message;}
 async function reloadEditorDocument() {
     const doc=changes.get(currentDocumentId());if(!doc||changes.operation)return;
-    if(!confirm('Перечитать '+doc.label+' с роутера? Черновик и история этого файла будут сброшены.'))return;
-    changes.forget(doc.id);
-    if(doc.kind==='config')await loadConfig();else {activeList='';await loadLists();if(!doc.saved.deleted)await selectList(doc.label);}
+    if(!confirm('Загрузить '+doc.label+' с роутера? Черновик и история этого файла будут сброшены. Порядок строк не меняется.'))return;
+    if(doc.kind==='config') {
+        if(!changes.begin('load'))return;
+        try {
+            const snapshot=await readConfigSnapshot();
+            changes.forget(doc.id);
+            changes.open(doc.id,{text:snapshot.content},{label:doc.label,kind:doc.kind,revision:snapshot.revision});
+            renderConfigDraft(changes.get(doc.id).draft);
+            changes.change(doc.id,captureConfigDraft());
+            fileActionStatus('Сохранённый конфиг загружен с роутера. Черновик сброшен; строки не сортировались.');
+        } catch(error){alert(error.message);} finally {changes.end();}
+    } else {
+        changes.forget(doc.id);activeList='';await loadLists();if(!doc.saved.deleted)await selectList(doc.label);
+        fileActionStatus('Список заново загружен с роутера.');
+    }
 }
 async function openChangeDocument(id) {
     const doc=changes.get(id);if(!doc)return;
@@ -281,7 +294,7 @@ function organizeDnsBlocks() {
         const rawMode = currentSettingsMode === 'raw';
         const source = rawMode ? (rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value) : gatherSectionsText();
         const organized = organizeDnsSource(source);
-        if (organized === source) return;
+        if (organized === source) {fileActionStatus('DNS и правила уже упорядочены. Изменений нет.');return;}
         if (rawMode) {
             document.getElementById('raw-config-text').value = organized;
             if (rawEditor) rawEditor.setValue(organized);
@@ -294,6 +307,7 @@ function organizeDnsBlocks() {
             initSortable();
         }
         markConfigDirty();
+        fileActionStatus('DNS и правила упорядочены в черновике. Просмотрите diff и сохраните изменения.');
     } catch (error) { alert(error.message); }
 }
 
@@ -328,10 +342,12 @@ function switchSettingsMode(mode) {
         if (!rawEditor) {
             CodeMirror.defineSimpleMode("smartdns", {
               start: [
-                {regex: /#.*/, token: "comment"},
-                {regex: /^(server(?:-[a-z0-9]+)?)\b/, token: "keyword"}, 
-                {regex: /^(bind-tcp|bind|force-AAAA-SOA|cache-persist|cache-size|prefetch-domain|serve-expired|response-mode|speed-check-mode|log-level|address|domain-set|nameserver|ipset|nftset)\b/, token: "builtin"},
-                {regex: /-(group|bootstrap-dns|exclude-default-group|name|file|e)\b/, token: "attribute"}, 
+                {regex: /^\s*#.*/, token: "comment"},
+                {regex: /^\s*(server(?:-[a-z0-9]+)?)\b/, token: "keyword"},
+                {regex: /^\s*(bind-tcp|bind|force-AAAA-SOA|cache-persist|cache-size|prefetch-domain|serve-expired|response-mode|speed-check-mode|log-level|address|domain-set|nameserver|domain-rules|https-record|ipset|nftset)\b/, token: "builtin"},
+                {regex: /--?[a-zA-Z][\w-]*\b/, token: "attribute"},
+                {regex: /\/(?:domain-set:)?[^\/\s]+\/(?:#[46]?|[^\s]*)?/, token: "string"},
+                {regex: /\b(?:yes|no|none|fastest-ip|fastest-response|first-ping|ping|tcp:\d+)\b/, token: "atom"},
                 {regex: /(?:https|tls|quic|h3|tcp):\/\/[^\s]+/, token: "string"}, 
                 {regex: /\b(?:\d{1,3}\.){3}\d{1,3}\b/, token: "number"} 
               ]

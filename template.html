@@ -75,7 +75,7 @@
                 <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
             </button><button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
                 <i class="bi bi-arrow-repeat me-1"></i> Применить
-            </button></div></section><p id="change-detail" class="small text-muted mt-3"></p><section class="action-group"><h3 class="action-heading">Обслуживание файла</h3><div class="action-buttons"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled>Перечитать файл</button><button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled>Разложить DNS по блокам</button></div></section></section><div class="action-panel-footer"><details><summary>Для разработчиков</summary>            <div class="form-check form-switch mx-3 mb-0">
+            </button></div></section><p id="change-detail" class="small text-muted mt-3"></p><section class="action-group"><h3 class="action-heading">Обслуживание файла</h3><div class="action-buttons"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled title="Загрузить сохранённый файл с роутера, сбросив черновик">Загрузить с роутера</button><button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled title="Упорядочить серверы и правила в черновике без применения DNS">Упорядочить DNS и правила</button></div><p id="file-action-status" role="status" class="small text-muted mt-2"></p></section></section><div class="action-panel-footer"><details><summary>Для разработчиков</summary>            <div class="form-check form-switch mx-3 mb-0">
                 <input class="form-check-input" type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
                 <label class="form-check-label text-light small" for="test-mode-toggle">Тест-режим</label>
             </div><p class="settings-section-hint">Тестовый режим использует отдельные файлы и черновики.</p></details></div></aside>
@@ -128,13 +128,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=40"></script>
+<script src="parser.js?v=41"></script>
 <script src="validator.js?v=3"></script>
 <script src="version.js?v=1"></script>
 <script src="config-review.js?v=6"></script>
 <script src="safe-apply.js?v=3"></script>
 <script src="change-center.js?v=1"></script>
 <script src="shell.js?v=4"></script>
-<script src="app.js?v=35"></script>
+<script src="app.js?v=36"></script>
 </body>
 </html>
