@@ -21,7 +21,7 @@ async function editor(fixture=config,mobile=false,applied=false){
 }
 test('visual and Raw changes share undo and survive tab switches without rewriting unchanged config',async()=>{
  const e=await editor();const {w}=e;try{
-  assert(!e.state().dirty());assert.equal(w.gatherSectionsText(),config);assert.match(w.document.getElementById('change-detail').textContent,/не проверялось/);
+  assert(!e.state().dirty());assert.equal(w.gatherSectionsText(),config);assert.match(w.document.getElementById('change-detail').textContent,/Подтверждение применения не найдено/);
   const field=w.document.getElementById('core-cache-size');assert(field);field.value='4096';field.dispatchEvent(new w.Event('input',{bubbles:true}));assert(e.state().dirty());
   w.switchSettingsMode('raw');assert.match(w.rawEditor.getValue(),/cache-size 4096/);w.rawEditor.setValue(w.rawEditor.getValue().replace('4096','2048'));w.undoEditorChange();assert.match(w.rawEditor.getValue(),/4096/);w.undoEditorChange();assert.equal(w.rawEditor.getValue(),config);assert(!e.state().dirty());w.redoEditorChange();w.switchSettingsMode('ui');assert.equal(w.document.getElementById('core-cache-size').value,'4096');
   await w.switchTab('lists',null,false);await w.switchTab('settings',null,false);assert.equal(w.document.getElementById('core-cache-size').value,'4096');assert.equal(e.calls.filter(x=>x.action==='get_config_snapshot').length,1);assert.equal(e.alerts.length,0);
