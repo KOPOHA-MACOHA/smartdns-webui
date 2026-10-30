@@ -127,6 +127,13 @@ NR==FNR {if($0!~/^#/ && $0!="") {split($0,profile,"\t");known[profile[1]]=1;if(p
         if(name=="" || file=="")report("E",FNR,"domain-set требует -name и -file.")
         else {sets[name]=1;print "FILE\t" FNR "\t" file}
     }
+    if(cmd=="domain-rules") {
+        for(i=3;i<=n;i++)if(token[i]=="-nameserver" || token[i]=="-n") {
+            i++;if(value(i,n) && token[i]!="-") {refs[++refcount]=token[i];refline[refcount]=FNR}
+        }
+        selector=token[2];sub(/^\//,"",selector);sub(/\/$/,"",selector)
+        if(selector~/^domain-set:/) {sub(/^domain-set:/,"",selector);usedset[++setcount]=selector;setline[setcount]=FNR}
+    }
     if(cmd=="nameserver") {
         if(n!=2)report("E",FNR,"nameserver требует правило /домен/группа.")
         count=split(token[2],route,"/");group=route[count];if(group=="")group=route[count-1]

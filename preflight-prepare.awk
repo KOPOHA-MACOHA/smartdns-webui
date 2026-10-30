@@ -47,6 +47,29 @@ preflight {
         print "domain-set -name " quote(name) " -type list -file " quote(work "/list-" id) > (work "/sandbox.conf")
         next
     }
+    if(cmd=="domain-rules") {
+        if(n<3 || token[2]!~/^\/[^/]+\/$/) {report("E",FNR,"Для изолированной проверки нужно правило /домен/ или /domain-set:имя/.");next}
+        selector=token[2];sub(/^\//,"",selector);sub(/\/$/,"",selector)
+        name=""
+        for(i=3;i<=n;i++) {
+            opt=token[i]
+            if(opt=="-no-serve-expired")continue
+            if(opt!~/^-(nameserver|response-mode|speed-check-mode)$/) {report("E",FNR,"Аргумент domain-rules пока не поддержан изолированной проверкой: " opt);break}
+            i++;if(i>n || token[i]=="") {report("E",FNR,"Отсутствует значение " opt);break}
+            if(opt=="-nameserver")name=token[i]
+            if(opt=="-response-mode" && token[i]!~/^(first-ping|fastest-ip|fastest-response)$/)report("E",FNR,"Некорректный режим выбора IP в domain-rules.")
+            if(opt=="-speed-check-mode") {
+                split(token[i],modes,",");for(k in modes)if(modes[k]!~/^(none|ping|tcp:[0-9]+)$/ || (modes[k]~/^tcp:/ && (substr(modes[k],5)+0<1 || substr(modes[k],5)+0>65535)))report("E",FNR,"Некорректная проверка доступности в domain-rules.")
+            }
+        }
+        if(selector!~/^(domain-set:)?[A-Za-z0-9][A-Za-z0-9_.-]*$/) {report("E",FNR,"Для такого шаблона domain-rules нельзя выбрать проверочный домен.");next}
+        if(name!="" && name!="-") {
+            preflight_group(name);routecount++;routegroup[routecount]=name
+            if(selector~/^domain-set:/) {sub(/^domain-set:/,"",selector);routeset[routecount]=selector}
+            else routedomain[routecount]=selector
+        }
+        print line > (work "/sandbox.conf");next
+    }
     if(!(cmd in allow)) {report("E",FNR,"Изолированная проверка недоступна для директивы " cmd ". Конфиг не меняется; небезопасные конструкции не выполняются.");next}
     if(cmd ~ /^server/) {
         for(i=3;i<=n;i++)if(token[i] ~ /^--?(p|proxy)(=|$)/ || token[i]~/^-p[^-]/)report("E",FNR,"Прокси-upstream пока не поддержан безопасной нативной проверкой.")

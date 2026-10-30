@@ -453,6 +453,7 @@ window.updateInlineName = function(input) {
 };
 
 window.refreshRouteGroupOptions = function() {
+    refreshDomainPolicyGroups();
     const names = Array.from(document.querySelectorAll('.group-name-input'))
         .map(input => input.value.trim()).filter(Boolean);
     document.querySelectorAll('.route-group').forEach(select => {
@@ -473,6 +474,7 @@ window.renameDnsGroup = function(input) {
     const newName = input.value.trim();
     updateInlineName(input);
     if (oldName && newName && oldName !== newName) {
+        refreshDomainPolicyGroups(oldName,newName);
         document.querySelectorAll('.route-group').forEach(select => {
             if (select.value === oldName || select.dataset.currentGroup === oldName) {
                 select.value = newName;
@@ -675,7 +677,90 @@ function addConfigHelp(root) {
 }
 
 // === ОСНОВНОЙ ПАРСЕР ===
+
+// Domain policies are independent of fixed address records. Unsupported forms stay in Other.
+function readDomainPolicy(line) {
+    const m=line.trim().match(/^(#\s*)?(domain-rules|https-record)\s+\/([^/\s]+)\/\s*(.*)$/);
+    if(!m || !/^(?:domain-set:)?[a-zA-Z0-9_.*-]+$/.test(m[3]))return null;
+    const policy={enabled:!m[1],domain:m[3],group:'',response:'',speed:'',expired:'',https:'',extra:'',raw:[line.trim()]};
+    if(m[2]==='https-record') {
+        if(m[4]!=='#')return null;
+        policy.https='block';return policy;
+    }
+    const tokens=m[4].match(/"[^"\n]*"|'[^'\n]*'|\S+/g)||[];
+    const options={'-nameserver':'group','-response-mode':'response','-speed-check-mode':'speed'};
+    const seen=new Set(),extra=[];
+    for(let i=0;i<tokens.length;i++) {
+        const t=tokens[i],key=options[t];
+        if(key) {
+            if(seen.has(key)||!tokens[i+1]||tokens[i+1].startsWith('-'))return null;
+            seen.add(key);policy[key]=tokens[++i];
+        } else if(t==='-no-serve-expired') {
+            if(seen.has('expired'))return null;
+            seen.add('expired');policy.expired='no';
+        } else extra.push(t);
+    }
+    if(policy.response&&!['fastest-ip','fastest-response','first-ping'].includes(policy.response))return null;
+    policy.extra=extra.join(' ');return policy;
+}
+function domainPolicyValues(item) {
+    const value=name=>item.querySelector('.policy-'+name).value.trim();
+    return {enabled:item.querySelector('.policy-enabled').checked,domain:value('domain'),group:value('group'),response:value('response'),speed:value('speed'),expired:value('expired'),https:value('https'),extra:value('extra')};
+}
+function domainPolicyCard(p={}) {
+    p={enabled:true,domain:'',group:'',response:'',speed:'',expired:'',https:'',extra:'',raw:[],...p};
+    const select=(name,label,options,help)=>'<label class="policy-field"><span>'+label+' '+UI.help(help)+'</span><select class="form-select policy-'+name+'" onchange="updateDomainPolicy(this,event)">'+options.map(([v,t])=>'<option value="'+UI.escape(v)+'" '+(p[name]===v?'selected':'')+'>'+UI.escape(t)+'</option>').join('')+'</select></label>';
+    const speedOptions=[['','Как в основных настройках'],['tcp:443','TCP 443'],['tcp:80','TCP 80'],['ping','ICMP Ping'],['tcp:443,ping','TCP 443, затем Ping'],['none','Не проверять']];
+    if(p.speed&&!speedOptions.some(([v])=>v===p.speed))speedOptions.push([p.speed,p.speed+' (из конфига)']);
+    return '<details class="domain-policy'+(p.enabled?'':' is-disabled')+'" '+(!p.domain?'open':'')+' data-policy="'+UI.escape(JSON.stringify(p))+'"><summary><span class="policy-title">'+UI.escape(p.domain||'Новое правило')+'</span><span class="policy-summary">'+UI.escape(domainPolicySummary(p))+'</span></summary><div class="policy-body"><div class="policy-toolbar"><label><input type="checkbox" class="policy-enabled" '+(p.enabled?'checked':'')+' onchange="updateDomainPolicy(this,event)"> Правило включено</label><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.domain-policy\').remove();markConfigDirty()">Удалить правило</button></div><div class="policy-fields"><label class="policy-field"><span>Домены или domain-set '+UI.help('Один домен на строку, без / и адреса IP. Правило действует также на поддомены. Для существующего набора: domain-set:имя. Это настройки поиска адреса, а не фиксированный IP.')+'</span><textarea rows="2" class="form-control policy-domain" oninput="updateDomainPolicy(this,event)" placeholder="ytimg.com&#10;ggpht.com">'+UI.escape(p.domain)+'</textarea></label>'+select('group','DNS-группа',[['','Как в основных настройках'],[p.group,p.group]].filter(([v],i)=>i===0||v),'Группа серверов для поиска адреса. Не означает направление трафика в VPN; обычный DNS по умолчанию наследуется.')+select('response','Выбор IP',[['','Как в основных настройках'],['fastest-response','Быстрый DNS-ответ'],['first-ping','Первый доступный IP'],['fastest-ip','IP с наименьшей задержкой']],'fastest-ip выбирает IP по проверкам задержки. Это не измерение скорости загрузки и не гарантия работы сервиса.')+select('speed','Проверка доступности',speedOptions,'TCP проверяет установление соединения на выбранный порт; Ping — ICMP. Проверки могут задерживать первый ответ. Порядок методов имеет значение.')+select('expired','Просроченный кэш',[['','Как в основных настройках'],['no','Не использовать']],'Не использовать ответы с истёкшим TTL. Действующий кэш продолжает работать; при отказе upstream просроченный ответ не поможет.')+select('https','DNS-записи HTTPS',[['','Без отдельного правила'],['block','Не возвращать (тип 65)']],'Пустой ответ на DNS-запрос HTTPS. Сам HTTPS сайта не блокируется. Убирает дополнительные подсказки подключения, но не запрещает QUIC/HTTP3.')+'</div>'+(p.extra?'<div class="settings-section-hint">Дополнительные аргументы сохранены. Для их изменения используйте Raw.</div>':'')+'<input type="hidden" class="policy-extra" value="'+UI.escape(p.extra)+'"></div></details>';
+}
+function domainPolicySummary(p) {
+    return [p.enabled?'':'Отключено',p.group?'DNS: '+p.group:'DNS: по умолчанию',p.response==='fastest-ip'?'Выбор по задержке':'',p.speed,p.expired?'Без просроченного кэша':'',p.https?'Без HTTPS-записей':'',p.extra?'Доп. аргументы':''].filter(Boolean).join(' · ');
+}
+window.updateDomainPolicy=function(control,event) {
+    const item=control.closest('.domain-policy'),p=domainPolicyValues(item);
+    item.classList.toggle('is-disabled',!p.enabled);
+    item.querySelector('.policy-title').textContent=p.domain.replace(/\n/g,', ')||'Новое правило';
+    item.querySelector('.policy-summary').textContent=domainPolicySummary(p);
+    markConfigDirty(event);
+};
+window.addDomainPolicy=function() {
+    document.getElementById('domain-policies-container').insertAdjacentHTML('beforeend',domainPolicyCard());
+    refreshDomainPolicyGroups();markConfigDirty();
+};
+window.refreshDomainPolicyGroups=function(oldName='',newName='') {
+    const names=Array.from(document.querySelectorAll('.group-name-input')).map(el=>el.value.trim()).filter(Boolean);
+    document.querySelectorAll('.policy-group').forEach(select=>{
+        let value=select.value;if(oldName&&value===oldName)value=newName;
+        const choices=[...new Set([...names,...(value?[value]:[])])];
+        select.innerHTML='<option value="">Как в основных настройках</option>'+choices.map(name=>'<option value="'+UI.escape(name)+'">'+UI.escape(name)+(names.includes(name)?'':' (не найдена)')+'</option>').join('');
+        select.value=value;
+        const item=select.closest('.domain-policy');item.querySelector('.policy-summary').textContent=domainPolicySummary(domainPolicyValues(item));
+    });
+};
+function gatherDomainPolicies(root) {
+    const lines=[];
+    root.querySelectorAll('.domain-policy').forEach(item=>{
+        const p=domainPolicyValues(item),original=JSON.parse(item.dataset.policy);
+        if(original.raw.length && Object.keys(p).every(key=>p[key]===original[key])) {lines.push(...original.raw);return;}
+        const domains=p.domain.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        if(!domains.length)throw new Error('Правило обработки доменов: укажите домен или удалите пустое правило.');
+        if(domains.some(d=>!/^(?:domain-set:)?[a-zA-Z0-9_*-]+(?:\.[a-zA-Z0-9_*-]+)*\.?$/.test(d)))throw new Error('Правило обработки доменов: один домен на строку, без /, пробелов и URL.');
+        if(p.group&&!/^[\w.-]+$/.test(p.group))throw new Error('Некорректное имя DNS-группы в правиле.');
+        const options=[p.group?'-nameserver '+p.group:'',p.response?'-response-mode '+p.response:'',p.speed?'-speed-check-mode '+p.speed:'',p.expired?'-no-serve-expired':'',p.extra].filter(Boolean).join(' ');
+        const prefix=p.enabled?'':'# ';
+        domains.forEach(domain=>{
+            if(options)lines.push(prefix+'domain-rules /'+domain+'/ '+options);
+            if(p.https)lines.push(prefix+'https-record /'+domain+'/#');
+        });
+        if(!options&&!p.https)throw new Error('Правило обработки доменов: выберите хотя бы одну отдельную настройку.');
+    });
+    return lines.join('\n');
+}
+
 function parseConfigToSections(content) {
+    const policies=[];
+    const scoped=/^\s*(?:group-begin|group-end)\b/m.test(content);
     let coreLines = [], bootstrap = [], upstream = [], group = [], routing = [], other = [];
     let addresses = [];
     let routesObj = {}; 
@@ -724,6 +809,10 @@ function parseConfigToSections(content) {
         } else if (cmd === 'log-level') {
             if (!isComment) logging.level = activeLine.replace('log-level', '').trim();
             else other.push(originalTrimmed);
+        } else if (!scoped && ['domain-rules','https-record'].includes(cmd) && readDomainPolicy(originalTrimmed)) {
+            const policy=readDomainPolicy(originalTrimmed);
+            const previous=policies.find(p=>p.domain===policy.domain && p.enabled===policy.enabled && !p.https);
+            if(cmd==='https-record' && previous) {previous.https='block';previous.raw.push(originalTrimmed);} else policies.push(policy);
         } else if (cmd === 'address') {
             let m = activeLine.match(/^address\s+\/([^\/]+)\/(.+)$/);
             if (m) addresses.push({ domain: m[1], ip: m[2], enabled: !isComment });
@@ -825,6 +914,7 @@ function parseConfigToSections(content) {
                 </div>
             </div>
 
+            <div class="card mb-3"><div class="card-header section-header d-flex justify-content-between align-items-center"><span>Правила обработки доменов</span><button type="button" class="btn btn-sm btn-outline-success" onclick="addDomainPolicy()">+ Добавить</button></div><div class="card-body"><p class="settings-section-hint">Отдельные настройки DNS для доменов и списков. Остальные параметры наследуются из основных настроек.</p><div id="domain-policies-container">${policies.map(domainPolicyCard).join('')}</div></div></div>
             ${routing.length > 0 ? UI.card('Прочая маршрутизация (ipset/nftset)', 'routing', routing) : ''}
             ${other.length > 0 ? UI.card('Разное', 'other', other) : ''}
         </div>
@@ -1061,6 +1151,8 @@ function gatherSectionsCanonical(root = window.document) {
         text += `log-level ${logSel.value}\n\n`;
     }
 
+    const policiesText=gatherDomainPolicies(root);
+    if(policiesText)text+='\n'+policiesText+'\n';
     ['routing', 'other'].forEach(id => {
         const el = document.getElementById('sec-' + id);
         if (el && el.value.trim()) {
