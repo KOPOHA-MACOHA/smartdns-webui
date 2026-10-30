@@ -107,10 +107,11 @@ function renderChangeCenter() {
     disable('validate-config-btn',busy||!config);disable('preflight-config-btn',busy||!config);
     const applied=config&&doc.applyState==='COMMITTED'&&doc.applied===doc.draft.text&&!doc.draft.incomplete;
     disable('restart-service-btn',busy||!config||isTestMode||applied);
-    const applyButton=document.getElementById('restart-service-btn');
+    const headerActions=document.getElementById('header-file-actions');if(headerActions)headerActions.hidden=!doc;
+    const applyButton=document.getElementById('restart-service-btn');if(applyButton)applyButton.hidden=!config;
     if(applyButton){applyButton.innerHTML=applied?'<i class="bi bi-check2 me-1"></i> Применено':'<i class="bi bi-arrow-repeat me-1"></i> Применить';applyButton.title=applied?'Эта версия конфигурации успешно применена в текущем сеансе.':'Применить конфигурацию с проверкой и откатом';}
     disable('organize-dns-btn',busy||!config);disable('reload-change-btn',busy||!doc);
-    const save=document.getElementById('global-save-btn');if(save)save.classList.toggle('btn-primary',!!doc&&changes.dirty(id));
+    const save=document.getElementById('global-save-btn');if(save){save.classList.toggle('btn-primary',!!doc&&changes.dirty(id));save.title=doc?'Сохранить '+doc.label+' без перезапуска DNS (Ctrl+S)':'Выберите файл';}
     const status=document.getElementById('change-status');
     if(status)status.textContent=changes.operation?({save:'Сохранение файла…',validate:'Проверка…',preflight:'Тест DNS…',apply:'Применение DNS…',load:'Загрузка файла…'}[changes.operation]||changes.operation):!doc?'Выберите файл для редактирования':changes.dirty(id)?'Есть несохранённые правки':doc.kind==='config'&&doc.applied===doc.saved.text?'Сохранено и применено в этом сеансе':'Нет несохранённых правок';
     const detail=document.getElementById('change-detail');
@@ -294,7 +295,7 @@ function organizeDnsBlocks() {
         const rawMode = currentSettingsMode === 'raw';
         const source = rawMode ? (rawEditor ? rawEditor.getValue() : document.getElementById('raw-config-text').value) : gatherSectionsText();
         const organized = organizeDnsSource(source);
-        if (organized === source) {fileActionStatus('DNS и правила уже упорядочены. Изменений нет.');return;}
+        if (organized === source) {fileActionStatus('Конфиг уже отформатирован и упорядочен. Изменений нет.');return;}
         if (rawMode) {
             document.getElementById('raw-config-text').value = organized;
             if (rawEditor) rawEditor.setValue(organized);
@@ -307,7 +308,7 @@ function organizeDnsBlocks() {
             initSortable();
         }
         markConfigDirty();
-        fileActionStatus('DNS и правила упорядочены в черновике. Просмотрите diff и сохраните изменения.');
+        fileActionStatus('Конфиг отформатирован и упорядочен в черновике. Просмотрите diff и сохраните изменения.');
     } catch (error) { alert(error.message); }
 }
 

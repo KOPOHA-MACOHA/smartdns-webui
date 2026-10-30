@@ -12,7 +12,7 @@
     <!-- ДОБАВЛЕНО ДЛЯ ПОДСВЕТКИ СИНТАКСИСА -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/dracula.min.css">
-    <link rel="stylesheet" href="ui.css?v=10">
+    <link rel="stylesheet" href="ui.css?v=11">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
@@ -21,6 +21,11 @@
     <div class="topbar-inner">
         <a class="app-brand" href="/settings" onclick="event.preventDefault();openSettingsSection('core')"><strong>SMARTDNS</strong><span>WEBUI</span></a>
         <span class="app-topbar-caption">Управление DNS</span>
+        <div id="header-file-actions" class="header-file-actions" aria-label="Сохранение и применение"><button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="closeActionPanel(false);globalSave()" disabled>
+                <i class="bi bi-floppy me-1"></i> Сохранить
+            </button><button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="closeActionPanel(false);restartService()">
+                <i class="bi bi-arrow-repeat me-1"></i> Применить
+            </button></div>
         <div class="topbar-actions">            <button id="btn-update" class="btn btn-outline-secondary btn-sm fw-bold position-relative me-3" disabled onclick="performUpdate()">
                 <i class="bi bi-github me-1"></i> v<span id="current-version-text">...</span>
                 <span id="update-badge" class="position-absolute top-0 start-100 translate-middle p-1 bg-success border border-dark rounded-circle d-none"></span>
@@ -71,11 +76,7 @@
 </div>
 
 <button id="action-backdrop" type="button" hidden tabindex="-1" aria-label="Закрыть панель действий" onclick="closeActionPanel(true)"></button>
-<aside id="action-panel" role="dialog" aria-modal="true" aria-labelledby="action-panel-title" hidden inert><div class="action-panel-header"><h2 id="action-panel-title">Настройки и действия</h2><button class="shell-icon" onclick="closeActionPanel(true)" aria-label="Закрыть панель"><i class="bi bi-x-lg"></i></button></div><section id="change-center" aria-label="Изменения"><label for="change-document" class="form-label">Открытый файл</label><select id="change-document" class="form-select" onchange="openChangeDocument(this.value)"></select><p id="change-status" role="status" aria-live="polite" class="mt-3 mb-1"></p><p id="change-count" class="small text-muted"></p><section class="action-group"><h3 class="action-heading">Правки</h3><div class="action-buttons"><button id="undo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="undoEditorChange()" disabled>Отменить (Ctrl+Z)</button><button id="redo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="redoEditorChange()" disabled>Повторить</button><button id="diff-change-btn" class="btn btn-sm btn-outline-secondary" onclick="previewEditorChanges()" disabled>Посмотреть diff</button><button id="discard-change-btn" class="btn btn-sm btn-outline-secondary" onclick="discardEditorChanges()" disabled>Сбросить правки</button></div></section><section class="action-group"><h3 class="action-heading">Проверка DNS</h3><p class="settings-section-hint">Проверки не сохраняют конфигурацию и не перезапускают рабочую службу.</p><div class="action-buttons"><button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button><button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button></div></section><section class="action-group"><h3 class="action-heading">Сохранение и применение</h3><p class="settings-section-hint">Сохранение записывает выбранный файл. Применение загружает конфигурацию в SmartDNS с контролем отката.</p><div class="action-buttons"><button id="global-save-btn" class="btn btn-outline-secondary btn-sm fw-bold" onclick="globalSave()" disabled>
-                <i class="bi bi-floppy me-1"></i> Сохранить (Ctrl+S)
-            </button><button id="restart-service-btn" class="btn btn-warning btn-sm fw-bold" onclick="restartService()">
-                <i class="bi bi-arrow-repeat me-1"></i> Применить
-            </button></div></section><p id="change-detail" class="small text-muted mt-3"></p><section class="action-group"><h3 class="action-heading">Обслуживание файла</h3><div class="action-buttons"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled title="Загрузить сохранённый файл с роутера, сбросив черновик">Загрузить с роутера</button><button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled title="Упорядочить серверы и правила в черновике без применения DNS">Упорядочить DNS и правила</button></div><p id="file-action-status" role="status" class="small text-muted mt-2"></p></section></section><div class="action-panel-footer"><details><summary>Для разработчиков</summary>            <div class="form-check form-switch mx-3 mb-0">
+<aside id="action-panel" role="dialog" aria-modal="true" aria-labelledby="action-panel-title" hidden inert><div class="action-panel-header"><h2 id="action-panel-title">Настройки и действия</h2><button class="shell-icon" onclick="closeActionPanel(true)" aria-label="Закрыть панель"><i class="bi bi-x-lg"></i></button></div><section id="change-center" aria-label="Изменения"><label for="change-document" class="form-label">Открытый файл</label><select id="change-document" class="form-select" onchange="openChangeDocument(this.value)"></select><p id="change-status" role="status" aria-live="polite" class="mt-3 mb-1"></p><p id="change-count" class="small text-muted"></p><section class="action-group"><h3 class="action-heading">Правки</h3><div class="action-buttons"><button id="undo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="undoEditorChange()" disabled>Отменить (Ctrl+Z)</button><button id="redo-change-btn" class="btn btn-sm btn-outline-secondary" onclick="redoEditorChange()" disabled>Повторить</button><button id="diff-change-btn" class="btn btn-sm btn-outline-secondary" onclick="previewEditorChanges()" disabled>Посмотреть diff</button><button id="discard-change-btn" class="btn btn-sm btn-outline-secondary" onclick="discardEditorChanges()" disabled>Сбросить правки</button></div></section><section class="action-group"><h3 class="action-heading">Проверка DNS</h3><p class="settings-section-hint">Проверки не сохраняют конфигурацию и не перезапускают рабочую службу.</p><div class="action-buttons"><button id="validate-config-btn" class="btn btn-outline-secondary btn-sm" onclick="validateCurrentConfig()" title="Проверить конфигурацию без записи и перезапуска"><i class="bi bi-check2-circle"></i> Проверить</button><button id="preflight-config-btn" class="btn btn-outline-secondary btn-sm" onclick="preflightCurrentConfig()" title="Временный SmartDNS на localhost, до 45 секунд. Без сохранения и перезапуска рабочей службы"><i class="bi bi-activity"></i> Тест DNS</button></div></section><section class="action-group"><h3 class="action-heading">Сохранение и применение</h3><p class="settings-section-hint">Кнопки «Сохранить» и «Применить» находятся в шапке. Сохранение записывает выбранный файл; применение перезапускает SmartDNS с проверкой и откатом.</p></section><p id="change-detail" class="small text-muted mt-3"></p><section class="action-group"><h3 class="action-heading">Обслуживание файла</h3><div class="action-buttons"><button id="reload-change-btn" class="btn btn-sm btn-outline-secondary" onclick="reloadEditorDocument()" disabled title="Загрузить сохранённый файл с роутера, сбросив черновик">Загрузить с роутера</button><button id="organize-dns-btn" class="btn btn-sm btn-outline-secondary" onclick="organizeDnsBlocks()" disabled title="Убрать лишние пробелы и упорядочить серверы и правила в черновике">Форматировать конфиг</button></div><p id="file-action-status" role="status" class="small text-muted mt-2"></p></section></section><div class="action-panel-footer"><details><summary>Для разработчиков</summary>            <div class="form-check form-switch mx-3 mb-0">
                 <input class="form-check-input" type="checkbox" id="test-mode-toggle" onchange="toggleTestMode(this.checked)">
                 <label class="form-check-label text-light small" for="test-mode-toggle">Тест-режим</label>
             </div><p class="settings-section-hint">Тестовый режим использует отдельные файлы и черновики.</p></details></div></aside>
@@ -128,13 +129,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/mode/simple.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
-<script src="parser.js?v=41"></script>
+<script src="parser.js?v=42"></script>
 <script src="validator.js?v=3"></script>
 <script src="version.js?v=1"></script>
 <script src="config-review.js?v=6"></script>
 <script src="safe-apply.js?v=3"></script>
 <script src="change-center.js?v=1"></script>
 <script src="shell.js?v=4"></script>
-<script src="app.js?v=36"></script>
+<script src="app.js?v=37"></script>
 </body>
 </html>
