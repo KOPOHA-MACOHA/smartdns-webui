@@ -49,7 +49,7 @@ test('cancel and read failure do not write config; approval writes reviewed cont
     for(const [accepted,error] of [[false,false],[true,true],[true,false]]) {
         const h=harness(accepted,error);
         assert.equal(await h.context.globalSave(),accepted&&!error);
-        assert.deepEqual(h.calls,accepted&&!error?['get_config_snapshot','save_config']:['get_config_snapshot']);
+        assert.deepEqual(h.calls,accepted&&!error?['get_config_snapshot','save_config','get_applied_config_status']:['get_config_snapshot']);
         assert.equal(h.context.changes.get().saved.text,accepted&&!error?'new':'old');
     }
 });
@@ -143,7 +143,7 @@ test('validation dialog blocks errors, allows warning acknowledgement and escape
     }finally{w.close()}
 });
 test('saving an approved snapshot does not erase edits typed while the request is pending',async()=>{
- const h=harness(true);let resume;h.context.apiCall=()=>new Promise(resolve=>{resume=resolve});const pending=h.context.globalSave();await new Promise(setImmediate);h.context.changes.change('config:live',{text:'later'});resume('OK\nREVISION '+'b'.repeat(64)+'\n');assert.equal(await pending,true);assert.equal(h.context.changes.get().saved.text,'new');assert.equal(h.context.changes.get().draft.text,'later');assert(h.context.changes.dirty());assert.equal(h.context.changes.operation,null);
+ const h=harness(true);let resume;h.context.apiCall=action=>action==='get_applied_config_status'?Promise.resolve('UNCONFIRMED\n'):new Promise(resolve=>{resume=resolve});const pending=h.context.globalSave();await new Promise(setImmediate);h.context.changes.change('config:live',{text:'later'});resume('OK\nREVISION '+'b'.repeat(64)+'\n');assert.equal(await pending,true);assert.equal(h.context.changes.get().saved.text,'new');assert.equal(h.context.changes.get().draft.text,'later');assert(h.context.changes.dirty());assert.equal(h.context.changes.operation,null);
 });
 test('preview diff offers only Close and cannot write a file',async()=>{
  const dom=new JSDOM('<body/>',{runScripts:'outside-only'});const w=dom.window;w.HTMLDialogElement.prototype.showModal=function(){};w.HTMLDialogElement.prototype.close=function(){};w.eval(fs.readFileSync(require.resolve('../config-review.js'),'utf8'));try{const done=w.reviewConfigChanges('old','new',{preview:true,title:'a.list'});assert.equal(w.document.querySelectorAll('dialog button').length,1);assert.equal(w.document.querySelector('button').textContent,'Закрыть');w.document.querySelector('button').click();assert.equal(await done,false);}finally{w.close()}

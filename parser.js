@@ -974,6 +974,44 @@ function gatherSectionsText() {
 }
 
 
+
+// Browser-side equivalence for button state; the server independently verifies saved state.
+function configSemanticKey(source) {
+    const rows=[];let unsafe=false;
+    for(const line of String(source).split(/\r?\n/)) {
+        if(/^[ \t]*(?:#|$)/.test(line))continue;
+        const tokens=[];let word='',quote='',escape=false,started=false;
+        for(const c of line) {
+            if(escape){word+=c;escape=false;started=true;continue;}
+            if(c==='\\'){escape=true;started=true;continue;}
+            if(quote){if(c===quote)quote='';else word+=c;continue;}
+            if(c==='"'||c==="'"){quote=c;started=true;continue;}
+            if(c==='#'&&!started&&tokens.length&&!['address','ipset','nftset'].includes(tokens[0]))break;
+            if(/[ \t\r]/.test(c)){if(started){tokens.push(word);word='';started=false;}continue;}
+            word+=c;started=true;
+        }
+        if(quote||escape)return null;
+        if(started)tokens.push(word);if(!tokens.length)continue;
+        const cmd=tokens[0],https=cmd==='https-record'&&tokens.length===2&&/^\/[A-Za-z0-9][A-Za-z0-9_.-]*\/#$/.test(tokens[1]);
+        if(cmd==='https-record'&&!https)unsafe=true;
+        if(['conf-file','group-begin','group-end','group-match','client-rules'].includes(cmd))unsafe=true;
+        if(cmd==='domain-rules')for(let i=2;i<tokens.length;i++){
+            if(tokens[i]==='-no-serve-expired')continue;
+            if(['-nameserver','-response-mode','-speed-check-mode'].includes(tokens[i])&&i+1<tokens.length){i++;continue;}
+            unsafe=true;
+        }
+        rows.push({tokens,https,logging:cmd==='log-level'&&tokens.length===2,server:/^server(-tcp|-tls|-https)?$/.test(cmd)&&tokens.length>=2});
+    }
+    const ordered=[],filters=[],logging=[],servers=[];
+    for(const row of rows)(!unsafe&&row.https?filters:!unsafe&&row.logging?logging:!unsafe&&row.server?servers:ordered).push(JSON.stringify(row.tokens));
+    return JSON.stringify([ordered,filters.sort(),logging,servers]);
+}
+function sameConfigMeaning(a,b) {
+    if(typeof a!=='string'||typeof b!=='string')return false;
+    if(a===b)return true;
+    const key=configSemanticKey(a);return key!==null&&key===configSemanticKey(b);
+}
+
 // Explicit formatting only: preserve quoted/escaped values and comment text.
 function formatConfigSource(source) {
     return source.split(/(\r?\n)/).map((line,index)=>{
