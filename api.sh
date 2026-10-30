@@ -430,11 +430,64 @@ apply_control() (
     printf 'STATUS %s\nDEADLINE %s\n' "$(cat "$tx/status")" "$(cat "$tx/deadline")"
 )
 
+
+# Compare meaning on demand; no daemon or DNS probes. Sort only independently safe rules.
+semantic_config_hash() (
+    input=$1
+    [ -f "$input" ] && [ "$(wc -c < "$input")" -le 262144 ] || exit 1
+    work=$(mktemp -d /tmp/smartdns-meaning.XXXXXX) || exit 1
+    trap 'rm -f "$work/rows" "$work/sorted"; rmdir "$work"' EXIT
+    awk -v version=46.1 -v preflight=1 -f "$BASE_DIR/validator.awk" -f "$BASE_DIR/config-semantic.awk" "$BASE_DIR/validator-46.1.txt" "$input" > "$work/rows" || exit 1
+    LC_ALL=C sort "$work/rows" > "$work/sorted" || exit 1
+    config_hash "$work/sorted"
+)
+applied_config_identity() (
+    journal=$1
+    pid=$(cat "$journal/live.pid" 2>/dev/null) || exit 1
+    case "$pid" in ''|*[!0-9]*) exit 1 ;; esac
+    set -- $(for process in $(pidof smartdns 2>/dev/null); do
+        [ "$(readlink "/proc/$process/exe" 2>/dev/null)" != /opt/sbin/smartdns ] || printf '%s\n' "$process"
+    done)
+    [ "$#" = 1 ] && [ "$1" = "$pid" ] || exit 1
+    [ "$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null)" = "$(cat "$journal/live.stamp" 2>/dev/null)" ]
+)
+get_applied_config_status() (
+    [ "$TEST_MODE" != 1 ] || { echo UNCONFIRMED; exit 0; }
+    root=/opt/var/backups/smartdns-webui/apply
+    [ ! -d /tmp/smartdns-webui-dns-operation.lock ] || { echo UNCONFIRMED; exit 0; }
+    revision=$(config_hash "$CONF_FILE") || exit 1
+    for journal in "$root"/tx-*; do
+        [ -d "$journal" ] && [ ! -L "$journal" ] || continue
+        case "$(cat "$journal/status" 2>/dev/null)" in
+            COMMITTED) snapshot=candidate; file="$journal/candidate"; checksum="$journal/candidate.sha" ;;
+            ROLLED_BACK) snapshot=before; file="$journal/before.conf"; checksum="$journal/before.sha" ;;
+            *) continue ;;
+        esac
+        applied_config_identity "$journal" || continue
+        [ "$(config_hash "$file")" = "$(cat "$checksum" 2>/dev/null)" ] || continue
+        [ -f "$journal/$snapshot.inputs" ] || continue
+        valid=1;tab=$(printf '\t')
+        while IFS="$tab" read -r expected path; do
+            [ "$(config_hash "$path")" = "$expected" ] || { valid=0;break; }
+        done < "$journal/$snapshot.inputs"
+        [ "$valid" = 1 ] || continue
+        if [ "$revision" != "$(cat "$checksum")" ]; then
+            current_meaning=$(semantic_config_hash "$CONF_FILE") || continue
+            confirmed_meaning=$(semantic_config_hash "$file") || continue
+            [ "$current_meaning" = "$confirmed_meaning" ] || continue
+        fi
+        [ "$revision" = "$(config_hash "$CONF_FILE")" ] && applied_config_identity "$journal" || continue
+        printf 'APPLIED %s\n' "$revision";exit 0
+    done
+    echo UNCONFIRMED
+)
+
 handle_api() {
     ACTION="${1:-}"
     TARGET="${2:-}"
 
     case "$ACTION" in
+        "get_applied_config_status") get_applied_config_status ;;
         "get_active_apply")
             transaction=$(cat /tmp/smartdns-webui-dns-operation.lock/transaction 2>/dev/null || true)
             case "$transaction" in

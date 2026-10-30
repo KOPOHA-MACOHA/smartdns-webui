@@ -105,19 +105,20 @@ function renderChangeCenter() {
     disable('diff-change-btn',busy||!doc||!changes.dirty(id));disable('discard-change-btn',busy||!doc||!changes.dirty(id));
     disable('global-save-btn',busy||!doc||!changes.dirty(id));
     disable('validate-config-btn',busy||!config);disable('preflight-config-btn',busy||!config);
-    const applied=config&&doc.applyState==='COMMITTED'&&doc.applied===doc.draft.text&&!doc.draft.incomplete;
+    const applied=config&&doc.applyState==='COMMITTED'&&sameConfigMeaning(doc.applied,doc.draft.text)&&!doc.draft.incomplete;
     disable('restart-service-btn',busy||!config||isTestMode||applied);
     const headerActions=document.getElementById('header-file-actions');if(headerActions)headerActions.hidden=!doc;
     const applyButton=document.getElementById('restart-service-btn');if(applyButton)applyButton.hidden=!config;
-    if(applyButton){applyButton.innerHTML=applied?'<i class="bi bi-check2 me-1"></i> Применено':'<i class="bi bi-arrow-repeat me-1"></i> Применить';applyButton.title=applied?'Эта версия конфигурации успешно применена в текущем сеансе.':'Применить конфигурацию с проверкой и откатом';}
+    if(applyButton){applyButton.innerHTML=applied?'<i class="bi bi-check2 me-1"></i> Применено':'<i class="bi bi-arrow-repeat me-1"></i> Применить';applyButton.title=applied?'DNS уже использует эти настройки. Изменения оформления можно сохранить без перезапуска.':'Применить конфигурацию с проверкой и откатом';}
     disable('organize-dns-btn',busy||!config);disable('reload-change-btn',busy||!doc);
     const save=document.getElementById('global-save-btn');if(save){save.classList.toggle('btn-primary',!!doc&&changes.dirty(id));save.title=doc?'Сохранить '+doc.label+' без перезапуска DNS (Ctrl+S)':'Выберите файл';}
     const status=document.getElementById('change-status');
-    if(status)status.textContent=changes.operation?({save:'Сохранение файла…',validate:'Проверка…',preflight:'Тест DNS…',apply:'Применение DNS…',load:'Загрузка файла…'}[changes.operation]||changes.operation):!doc?'Выберите файл для редактирования':changes.dirty(id)?'Есть несохранённые правки':doc.kind==='config'&&doc.applied===doc.saved.text?'Сохранено и применено в этом сеансе':'Нет несохранённых правок';
+    if(status)status.textContent=changes.operation?({save:'Сохранение файла…',validate:'Проверка…',preflight:'Тест DNS…',apply:'Применение DNS…',load:'Загрузка файла…'}[changes.operation]||changes.operation):!doc?'Выберите файл для редактирования':changes.dirty(id)?'Есть несохранённые правки':doc.kind==='config'&&doc.applyState==='COMMITTED'&&doc.applied===doc.saved.text?'Сохранено и применено':'Нет несохранённых правок';
     const detail=document.getElementById('change-detail');
     if(detail)detail.textContent=!doc?'Черновики открытых файлов остаются в этом сеансе браузера.':doc.kind==='list'?(doc.draft.deleted?'Файл помечен к удалению. Подтвердите через «Сохранить».':doc.saved.deleted?'Новый файл будет создан при сохранении.':'Сохранение списка не перезапускает DNS.'):
         doc.applyState&&doc.applyState!=='COMMITTED'?'Последний статус применения: '+doc.applyState:
-        doc.applied===doc.saved.text?'Работа сети была подтверждена.':doc.savedInSession?'Файл сохранён. Для загрузки настроек в DNS нажмите «Применить».':'Файл загружен. Применение в этом сеансе не проверялось.';
+        doc.applyState==='COMMITTED'&&doc.applied===doc.saved.text?'Работа сети была подтверждена.':doc.savedInSession?'Файл сохранён. Для загрузки настроек в DNS нажмите «Применить».':'Файл загружен. Подтверждение применения не найдено.';
+    if(config&&applied&&changes.dirty(id)){if(status)status.textContent='Изменено только оформление';if(detail)detail.textContent='Нажмите «Сохранить». Перезапуск DNS и сторож не нужны.';}
     const select=document.getElementById('change-document');
     if(select){select.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='Открытые файлы';select.append(empty);
         for(const item of changes.documents.values()){
@@ -141,6 +142,7 @@ async function reloadEditorDocument() {
             changes.open(doc.id,{text:snapshot.content},{label:doc.label,kind:doc.kind,revision:snapshot.revision});
             renderConfigDraft(changes.get(doc.id).draft);
             changes.change(doc.id,captureConfigDraft());
+            await restoreAppliedConfigState(doc.id,snapshot);
             fileActionStatus('Сохранённый конфиг загружен с роутера. Черновик сброшен; строки не сортировались.');
         } catch(error){alert(error.message);} finally {changes.end();}
     } else {
@@ -511,6 +513,7 @@ async function globalSave() {
                 throw new Error(typeof reply==='string'&&reply.startsWith('CONFLICT:')?'Файл изменился во время просмотра. Правки остались в редакторе.':'Сохранение не подтверждено. Проверьте соединение и резервные копии.');
             }
             changes.saved(id,snapshot,reply.slice(12,76));
+            await restoreAppliedConfigState(id,{content:snapshot.text,revision:reply.slice(12,76)});
         } else {
             if(snapshot.deleted) {
                 if(!confirm('Удалить файл '+doc.label+'? Его содержимое останется в истории этого сеанса.'))return false;
@@ -527,6 +530,16 @@ async function globalSave() {
     finally {changes.end();}
 }
 
+async function restoreAppliedConfigState(id,snapshot) {
+    if(isTestMode)return;
+    let reply='';
+    try {reply=await apiCall('get_applied_config_status',null,null,true);} catch(_) {}
+    const doc=changes.get(id);
+    if(doc?.revision!==snapshot.revision || doc.saved.text!==snapshot.content)return;
+    const confirmed=typeof reply==='string' && reply.trim()==='APPLIED '+snapshot.revision;
+    changes.applyState(id,confirmed?'COMMITTED':null,snapshot.content);
+}
+
 async function loadConfig() {
     const id=configDocumentId(),mode=isTestMode;
     if(changes.has(id)) {
@@ -539,6 +552,7 @@ async function loadConfig() {
         changes.open(id,{text:snapshot.content},{label:isTestMode?'Тестовая конфигурация':'Конфигурация DNS',kind:'config',revision:snapshot.revision});
         renderConfigDraft(changes.get(id).draft);
         changes.change(id,captureConfigDraft());
+        await restoreAppliedConfigState(id,snapshot);
         renderChangeCenter();
     } catch(error){alert(error.message);}
     finally{changes.end();}
@@ -581,7 +595,7 @@ async function restartService() {
     } catch(error){alert('Применение не подтверждено: '+error.message);}
     finally {
         if(observed)try {
-            const disk=await readConfigSnapshot();changes.saved(id,{text:disk.content},disk.revision);
+            const disk=await readConfigSnapshot();changes.saved(id,{text:disk.content},disk.revision);await restoreAppliedConfigState(id,disk);
         }catch(_){/* Keep the draft and its revision if the connection was lost. */}
         changes.end();
     }
