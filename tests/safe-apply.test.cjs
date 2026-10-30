@@ -60,8 +60,8 @@ test('lost status response disables confirmation and displays an unknown result'
  try{const promise=w.monitorSafeApply('tx-ABCDEFGHIJKL',async()=>{throw Error('offline')});await flush();assert.equal(w.document.querySelector('dialog button').disabled,true);assert.match(w.document.querySelector('[role=status]').textContent,/неизвестен/);w.document.querySelectorAll('dialog button')[2].click();await promise;}finally{w.close()}
 });
 const app=fs.readFileSync(require.resolve('../app.js'),'utf8');const source=app.slice(app.indexOf('async function restartService()'),app.indexOf('async function loadLists()'));
-function editor({accept=true,stale=false,testMode=false}={}) {
- const dom=new JSDOM('<button id="restart-service-btn">Apply</button>',{url:'http://localhost'});const calls=[];const storage=new Map();let text='candidate';
+function editor({accept=true,stale=false,testMode=false,pending=false}={}) {
+ const dom=new JSDOM('<button id="restart-service-btn">Apply</button>',{url:'http://localhost'});const calls=[];const storage=new Map();if(pending)storage.set('smartdns-apply-transaction','tx-ABCDEFGHIJKL');let text='candidate';
  const context={document:dom.window.document,activeTab:'settings',safeApplyBusy:false,preflightBusy:false,isTestMode:testMode,configSnapshotMode:testMode,configRevision:'original',currentSettingsMode:'ui',originalConfigContent:'before',
   localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
   gatherSectionsText:()=>text,validateConfigLogical:async()=>null,validateConfigOnServer:async()=>({errors:[]}),
@@ -80,3 +80,5 @@ test('apply sends the reviewed snapshot directly, without saving it before armin
 test('cancel, stale revision and UI test mode cannot launch live application',async()=>{
  for(const options of [{accept:false},{stale:true},{testMode:true}]){const e=editor(options);try{await e.context.restartService();assert(!e.calls.includes('apply_config'));assert(!e.calls.includes('save_config'));assert(!e.calls.includes('restart_service'));assert.equal(e.context.changes.get().revision,'original');}finally{e.dom.window.close()}}
 });
+
+test('a finished transaction cached by the browser does not block a new apply',async()=>{const e=editor({pending:true});try{await e.context.restartService();assert.deepEqual(e.calls,['get_active_apply','apply_config']);}finally{e.dom.window.close()}});

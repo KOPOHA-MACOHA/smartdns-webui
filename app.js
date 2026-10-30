@@ -537,15 +537,14 @@ async function restartService() {
     };
     try {
         if(isTestMode)throw new Error('Применение отключено в тестовом режиме.');
-        let pending=localStorage.getItem('smartdns-apply-transaction');
-        if(!pending) {
-            const active=await apiCall('get_active_apply',null,null,true);
-            if(active.trim()!=='NONE'){
-                const match=/^TRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(active);
-                if(!match)throw new Error('Не удалось определить текущую операцию.');
-                pending=match[1];localStorage.setItem('smartdns-apply-transaction',pending);
-            }
-        }
+        // The server lock is authoritative; browser storage may name a finished operation.
+        let pending=null;
+        const active=await apiCall('get_active_apply',null,null,true);
+        if(active.trim()!=='NONE') {
+            const match=/^TRANSACTION (tx-[A-Za-z0-9]{12})\n?$/.exec(active);
+            if(!match)throw new Error('Не удалось определить текущую операцию.');
+            pending=match[1];localStorage.setItem('smartdns-apply-transaction',pending);
+        } else {try {localStorage.removeItem?.('smartdns-apply-transaction');} catch (_) {}} 
         if(pending){await monitor(pending);return;}
         if(!doc?.revision)throw new Error('Заново загрузите конфигурацию перед применением.');
         const snapshot=captureConfigDraft();
