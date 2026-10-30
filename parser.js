@@ -973,9 +973,32 @@ function gatherSectionsText() {
     return patchConfigSource(JSON.parse(record.dataset.source), JSON.parse(record.dataset.baseline), generated);
 }
 
+
+// Explicit formatting only: preserve quoted/escaped values and comment text.
+function formatConfigSource(source) {
+    return source.split(/(\r?\n)/).map((line,index)=>{
+        if(index%2)return line;
+        if(/^\s*#/.test(line))return line.replace(/^[ \t]+/,'').replace(/[ \t]+$/,'');
+        let out='',quote='',escape=false,space=false;
+        for(let i=0;i<line.length;i++) {
+            const c=line[i];
+            if(escape){out+=c;escape=false;continue;}
+            if(quote){out+=c;if(c==='\\')escape=true;else if(c===quote)quote='';continue;}
+            if(c===' '||c==='\t'){space=out.length>0;continue;}
+            if(c==='#' && space)return out+' '+line.slice(i).replace(/[ \t]+$/,'');
+            if(space){out+=' ';space=false;}
+            out+=c;
+            if(c==='"'||c==="'")quote=c;
+            else if(c==='\\')escape=true;
+        }
+        return out;
+    }).join('');
+}
+
 // Explicit formatting action; normal edits still preserve the original file layout.
 function organizeDnsSource(source) {
     if (/^\s*(?:group-begin|group-end)\b/m.test(source)) throw new Error('Конфиг содержит области group-begin/group-end: раскладывайте DNS вручную, чтобы сохранить область действия.');
+    source=formatConfigSource(source);
     const newline = source.includes('\r\n') ? '\r\n' : '\n';
     const finalNewline = source.endsWith('\n');
     const lines = source.split(/\r?\n/);
